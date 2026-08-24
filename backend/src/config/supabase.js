@@ -10,18 +10,21 @@ export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
   supabaseKey && 
   !supabaseUrl.includes('placeholder') &&
-  !supabaseUrl.includes('your-supabase-project')
+  !supabaseKey.includes('placeholder')
 );
 
 if (!isSupabaseConfigured) {
-  console.warn('⚠️ [Supabase] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing or using placeholder in .env. Using in-memory persistent store fallback for seamless operation.');
+  console.warn('⚠️ [Supabase] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing or placeholder in .env. Operating in hybrid memory-fallback mode.');
 }
 
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false
-      }
-    })
-  : null;
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseKey || 'placeholder-key',
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false
+    }
+  }
+);
+

@@ -1,59 +1,122 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { findTeamByName, findTeamById, createTeam, getAllTeamsList } from '../services/teamStore.js';
-import { broadcastAllTeams } from '../services/socketService.js';
+import { supabase, isSupabaseConfigured } from '../config/supabase.js';
+import { broadcastTeamsUpdate } from '../services/socketService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'math_club_auction_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_bingo_math_club_key_2026';
+
+// In-memory fallback store when Supabase tables/keys are not active
+const memoryTeams = new Map();
+
+// Pre-seed default Admin if needed
+const DEFAULT_ADMIN_NAME = 'Admin';
+const DEFAULT_ADMIN_PASS = 'admin123';
+
+async function initDefaultMemoryAdmin() {
+  const hash = await bcrypt.hash(DEFAULT_ADMIN_PASS, 10);
+  memoryTeams.set('admin-default-id', {
+    id: 'admin-default-id',
+    team_name: DEFAULT_ADMIN_NAME,
+    password_hash: hash,
+    role: 'admin',
+    coins: 0,
+    numbers_collected: [],
+    created_at: new Date().toISOString()
+  });
+}
+initDefaultMemoryAdmin();
 
 /**
- * POST /api/auth/signup (or /register)
- * Team or Admin Registration
- * Sets initial coins = 50,000 | numbers_collected = []
+ * Register a new team or admin
  */
 export async function signUp(req, res) {
   try {
-    const { teamName, password = 'TeamPassword123!', role = 'team' } = req.body;
+    const { teamName, password, role = 'team' } = req.body;
 
-    if (!teamName || !teamName.trim()) {
-      return res.status(400).json({ error: 'teamName is required.' });
+    if (!teamName || !password) {
+      return res.status(400).json({ error: 'teamName and password are required.' });
     }
 
-    const trimmed = teamName.trim();
+    const trimmedTeamName = teamName.trim();
+    const dbRole = role === 'admin' ? 'admin' : 'team';
+    const initialCoins = dbRole === 'team' ? 50000 : 0;
+    const initialNumbers = [];
 
-    // Check if team name already exists
-    const existing = await findTeamByName(trimmed);
-    if (existing) {
-      return res.status(400).json({ error: `Team "${trimmed}" is already registered. Please sign in.` });
-    }
-
-    // Hash password with bcrypt
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // Create team with 50,000 initial coins
-    const newTeam = await createTeam({
-      teamName: trimmed,
-      passwordHash,
-      role: role === 'admin' ? 'admin' : 'team'
-    });
+    let newTeam = null;
 
-    // Generate JWT token with Role
+    if (isSupabaseConfigured) {
+      // Check if team name exists in Supabase
+      const { data: existingTeam } = await supabase
+        .from('teams')
+        .select('id, team_name')
+        .ilike('team_name', trimmedTeamName)
+        .maybeSingle();
+
+      if (existingTeam) {
+        return res.status(400).json({ error: `Team name "${trimmedTeamName}" is already taken.` });
+      }
+
+      // Insert into Supabase
+      const { data, error } = await supabase
+        .from('teams')
+        .insert({
+          team_name: trimmedTeamName,
+          password_hash: passwordHash,
+          role: dbRole,
+          coins: initialCoins,
+          numbers_collected: initialNumbers
+        })
+        .select('id, team_name, role, coins, numbers_collected, created_at')
+        .single();
+
+      if (error) {
+        console.warn('⚠️ Supabase insert failed, falling back to memory store:', error.message);
+      } else {
+        newTeam = data;
+      }
+    }
+
+    // Fallback if Supabase was not used or failed
+    if (!newTeam) {
+      // Check memory store for duplicate
+      for (const t of memoryTeams.values()) {
+        if (t.team_name.toLowerCase() === trimmedTeamName.toLowerCase()) {
+          return res.status(400).json({ error: `Team name "${trimmedTeamName}" is already taken.` });
+        }
+      }
+
+      const id = 'team_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      newTeam = {
+        id,
+        team_name: trimmedTeamName,
+        password_hash: passwordHash,
+        role: role,
+        coins: initialCoins,
+        numbers_collected: initialNumbers,
+        created_at: new Date().toISOString()
+      };
+      memoryTeams.set(id, newTeam);
+    }
+
+    // Generate JWT token
     const token = jwt.sign(
       { id: newTeam.id, teamName: newTeam.team_name, role: newTeam.role },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '24h' }
     );
 
-    const { password_hash, ...safeTeamData } = newTeam;
-
-    // Realtime broadcast of updated team standings
+    // Broadcast updated teams list
     const allTeams = await getAllTeamsList();
-    broadcastAllTeams(allTeams.filter(t => t.role === 'team'));
+    broadcastTeamsUpdate(allTeams, newTeam);
 
+    const { password_hash, ...safeTeam } = newTeam;
     return res.status(201).json({
       message: 'Registration successful',
       token,
-      team: safeTeamData
+      team: safeTeam
     });
   } catch (err) {
     console.error('Sign up error:', err);
@@ -62,45 +125,61 @@ export async function signUp(req, res) {
 }
 
 /**
- * POST /api/auth/signin (or /login)
- * Team or Admin Login with bcrypt verification
+ * Sign in using teamName and password
  */
 export async function signIn(req, res) {
   try {
     const { teamName, password } = req.body;
 
-    if (!teamName || !teamName.trim()) {
-      return res.status(400).json({ error: 'teamName is required.' });
+    if (!teamName || !password) {
+      return res.status(400).json({ error: 'teamName and password are required.' });
     }
 
-    const trimmed = teamName.trim();
-    const team = await findTeamByName(trimmed);
+    const trimmedTeamName = teamName.trim();
+    let team = null;
 
-    if (!team) {
-      return res.status(404).json({ error: `Team "${trimmed}" not found. Please register first.` });
-    }
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('teams')
+        .select('*')
+        .ilike('team_name', trimmedTeamName)
+        .maybeSingle();
 
-    // Validate password if provided
-    if (password && team.password_hash) {
-      const isValid = await bcrypt.compare(password, team.password_hash);
-      if (!isValid) {
-        return res.status(401).json({ error: 'Invalid password.' });
+      if (!error && data) {
+        team = data;
       }
     }
 
-    // Generate JWT token
+    // Fallback check memory store
+    if (!team) {
+      for (const t of memoryTeams.values()) {
+        if (t.team_name.toLowerCase() === trimmedTeamName.toLowerCase()) {
+          team = t;
+          break;
+        }
+      }
+    }
+
+    if (!team) {
+      return res.status(401).json({ error: 'Invalid team name or password.' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, team.password_hash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid team name or password.' });
+    }
+
     const token = jwt.sign(
       { id: team.id, teamName: team.team_name, role: team.role },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '24h' }
     );
 
-    const { password_hash, ...safeTeamData } = team;
-
+    const { password_hash, ...safeTeam } = team;
     return res.json({
       message: 'Sign in successful',
       token,
-      team: safeTeamData
+      team: safeTeam
     });
   } catch (err) {
     console.error('Sign in error:', err);
@@ -109,18 +188,191 @@ export async function signIn(req, res) {
 }
 
 /**
- * GET /api/auth/profile
- * Get authenticated user profile via JWT
+ * Get profile of current logged in user
  */
 export async function getProfile(req, res) {
   try {
-    const team = await findTeamById(req.user.id);
-    if (!team) {
-      return res.json({ team: req.user });
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Missing authorization header' });
+
+    const token = authHeader.replace('Bearer ', '');
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    let team = null;
+    if (isSupabaseConfigured) {
+      const { data } = await supabase
+        .from('teams')
+        .select('id, team_name, role, coins, numbers_collected, created_at')
+        .eq('id', decoded.id)
+        .maybeSingle();
+
+      if (data) team = data;
     }
-    const { password_hash, ...safeData } = team;
-    return res.json({ team: safeData });
+
+    if (!team && memoryTeams.has(decoded.id)) {
+      const { password_hash, ...safe } = memoryTeams.get(decoded.id);
+      team = safe;
+    }
+
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    return res.json({ team });
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+/**
+ * Get all teams for leaderboard (accessible to all)
+ */
+export async function getTeams(req, res) {
+  try {
+    const teams = await getAllTeamsList();
+    return res.json(teams);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
+}
+
+/**
+ * Admin Updates Team Points & Numbers Collected
+ */
+export async function updateTeamPoints(req, res) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Missing authorization header' });
+
+    const token = authHeader.replace('Bearer ', '');
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (decoded.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied. Only main source computer (Admin) can edit team points.' });
+    }
+
+    const { teamId, coinsDeducted = 0, questionAnswer = 'no', bonusCoins = 0, numberObtained = null } = req.body;
+
+    if (!teamId) {
+      return res.status(400).json({ error: 'teamId is required.' });
+    }
+
+    const numDeducted = Math.max(0, Number(coinsDeducted) || 0);
+    const numBonus = questionAnswer === 'yes' ? Math.max(0, Number(bonusCoins) || 0) : 0;
+
+    let targetTeam = null;
+
+    // Fetch existing team
+    if (isSupabaseConfigured) {
+      const { data } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('id', teamId)
+        .maybeSingle();
+      if (data) targetTeam = data;
+    }
+
+    if (!targetTeam && memoryTeams.has(teamId)) {
+      targetTeam = memoryTeams.get(teamId);
+    }
+
+    if (!targetTeam) {
+      return res.status(404).json({ error: 'Selected team not found.' });
+    }
+
+    // Calculate new coins
+    const currentCoins = Number(targetTeam.coins) || 0;
+    const newCoins = Math.max(0, currentCoins - numDeducted + numBonus);
+
+    // Calculate new numbers collected
+    let currentNumbers = Array.isArray(targetTeam.numbers_collected) ? [...targetTeam.numbers_collected] : [];
+    if (questionAnswer === 'yes' && numberObtained !== null && numberObtained !== '') {
+      const numVal = Number(numberObtained);
+      if (!isNaN(numVal) && !currentNumbers.includes(numVal)) {
+        currentNumbers.push(numVal);
+        currentNumbers.sort((a, b) => a - b);
+      }
+    }
+
+    let updatedTeam = null;
+
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('teams')
+        .update({
+          coins: newCoins,
+          numbers_collected: currentNumbers
+        })
+        .eq('id', teamId)
+        .select('id, team_name, role, coins, numbers_collected, created_at')
+        .single();
+
+      if (!error && data) {
+        updatedTeam = data;
+      }
+    }
+
+    // Fallback or sync memory store
+    if (memoryTeams.has(teamId)) {
+      const memItem = memoryTeams.get(teamId);
+      memItem.coins = newCoins;
+      memItem.numbers_collected = currentNumbers;
+      memoryTeams.set(teamId, memItem);
+      if (!updatedTeam) {
+        const { password_hash, ...safe } = memItem;
+        updatedTeam = safe;
+      }
+    }
+
+    if (!updatedTeam) {
+      updatedTeam = {
+        id: targetTeam.id,
+        team_name: targetTeam.team_name,
+        role: targetTeam.role,
+        coins: newCoins,
+        numbers_collected: currentNumbers
+      };
+    }
+
+    // Realtime broadcast to all open dashboards
+    const allTeams = await getAllTeamsList();
+    broadcastTeamsUpdate(allTeams, updatedTeam);
+
+    return res.json({
+      message: `Successfully updated ${targetTeam.team_name}`,
+      team: updatedTeam,
+      allTeams
+    });
+  } catch (err) {
+    console.error('Update team error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to update team' });
+  }
+}
+
+/**
+ * Helper to fetch list of all teams excluding passwords
+ */
+async function getAllTeamsList() {
+  let teamsList = [];
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from('teams')
+      .select('id, team_name, role, coins, numbers_collected, created_at')
+      .order('coins', { ascending: false });
+
+    if (!error && data) {
+      teamsList = data;
+    }
+  }
+
+  // Merge with memory store teams
+  for (const t of memoryTeams.values()) {
+    if (t.role === 'team' && !teamsList.some(item => item.id === t.id)) {
+      const { password_hash, ...safe } = t;
+      teamsList.push(safe);
+    }
+  }
+
+  // Filter out admin accounts from public team list
+  teamsList = teamsList.filter(t => t.role !== 'admin');
+  teamsList.sort((a, b) => b.coins - a.coins);
+
+  return teamsList;
 }

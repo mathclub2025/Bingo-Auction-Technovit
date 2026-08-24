@@ -1,16 +1,23 @@
 import express from 'express';
-import { signUp, signIn, getProfile } from '../controllers/authController.js';
-import { authenticateToken } from '../middleware/authMiddleware.js';
+import {
+  signUp,
+  signIn,
+  getProfile,
+  getTeams,
+  updateTeamPoints
+} from '../controllers/authController.js';
 
 const router = express.Router();
 
-// Public Authentication Endpoints
+// Authentication
 router.post('/signup', signUp);
-router.post('/register', signUp);
-router.post('/signin', signIn);
 router.post('/login', signIn);
+router.get('/me', getProfile);
 
-// Protected Authentication Profile
-router.get('/profile', authenticateToken, getProfile);
+// Public / Team view
+router.get('/teams', getTeams);
+
+// Admin Source Computer actions
+router.post('/admin/update-team', updateTeamPoints);
 
 export default router;
