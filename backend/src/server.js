@@ -22,7 +22,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Setup Socket.io Real-Time Gateway
+// Setup Socket.io
 const io = new Server(server, {
   cors: {
     origin: '*',
@@ -31,33 +31,31 @@ const io = new Server(server, {
 });
 setupSocketService(io);
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Math Club Auction Arena API Server',
+    status: 'online',
+    version: '1.0.0'
+  });
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/teams', teamRoutes);
 
-// Root / Health Check
-app.get('/', (req, res) => {
-  res.json({
-    service: 'Math Club Auction Arena API',
-    status: 'online',
-    version: '2.0.0',
-    endpoints: {
-      auth: '/api/auth',
-      teams: '/api/teams'
-    },
-    timestamp: new Date().toISOString()
-  });
-});
-
+// Health Check
 app.get('/health', (req, res) => {
   res.json({
-    status: 'healthy',
+    status: 'online',
+    service: 'Math Club Auction Arena Backend',
     timestamp: new Date().toISOString()
   });
 });
 
 // Start Server
 server.listen(PORT, () => {
-  console.log(`🚀 [Server] Math Club Auction Backend running at http://localhost:${PORT}`);
+  console.log(`🚀 [Server] Math Club Auction Backend running on http://localhost:${PORT}`);
   console.log(`📡 [Socket.io] Realtime WebSocket gateway active`);
 });
+
