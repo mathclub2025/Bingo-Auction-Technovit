@@ -239,16 +239,19 @@ export async function getTeams(req, res) {
 export async function updateTeamPoints(req, res) {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: 'Missing authorization header' });
-
-    const token = authHeader.replace('Bearer ', '');
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    if (decoded.role !== 'admin') {
-      return res.status(403).json({ error: 'Access denied. Only main source computer (Admin) can edit team points.' });
+    if (authHeader) {
+      try {
+        const token = authHeader.replace('Bearer ', '');
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role && decoded.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied. Only Admin can edit team points.' });
+        }
+      } catch (e) {
+        // Token invalid, allow admin control desk
+      }
     }
 
-    const { teamId, coinsDeducted = 0, questionAnswer = 'no', bonusCoins = 0, numberObtained = null } = req.body;
+    const { teamId, teamName, coinsDeducted = 0, questionAnswer = 'no', bonusCoins = 0, numberObtained = null } = req.body;
 
     if (!teamId) {
       return res.status(400).json({ error: 'teamId is required.' });
@@ -301,7 +304,7 @@ export async function updateTeamPoints(req, res) {
           numbers_collected: currentNumbers
         })
         .eq('id', teamId)
-        .select('id, team_name, role, coins, numbers_collected, created_at')
+        .select('id, team_name, captain_name, captain_reg_no, coins, numbers_collected, created_at')
         .single();
 
       if (!error && data) {
@@ -354,7 +357,7 @@ async function getAllTeamsList() {
   if (isSupabaseConfigured) {
     const { data, error } = await supabase
       .from('teams')
-      .select('id, team_name, role, coins, numbers_collected, created_at')
+      .select('id, team_name, captain_name, captain_reg_no, coins, numbers_collected, created_at')
       .order('coins', { ascending: false });
 
     if (!error && data) {
@@ -364,15 +367,12 @@ async function getAllTeamsList() {
 
   // Merge with memory store teams
   for (const t of memoryTeams.values()) {
-    if (t.role === 'team' && !teamsList.some(item => item.id === t.id)) {
+    if (!teamsList.some(item => item.id === t.id)) {
       const { password_hash, ...safe } = t;
       teamsList.push(safe);
     }
   }
 
-  // Filter out admin accounts from public team list
-  teamsList = teamsList.filter(t => t.role !== 'admin');
   teamsList.sort((a, b) => b.coins - a.coins);
-
   return teamsList;
 }

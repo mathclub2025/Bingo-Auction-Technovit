@@ -121,10 +121,13 @@ export async function getAllTeamsList() {
     try {
       const { data, error } = await supabase
         .from('teams')
-        .select('id, team_name, role, coins, numbers_collected, created_at, updated_at')
+        .select('id, team_name, captain_name, captain_reg_no, coins, numbers_collected, created_at, updated_at')
         .order('coins', { ascending: false });
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data;
+      }
+      if (error) {
+        console.warn('[Store] Supabase fetch error:', error.message);
       }
     } catch (e) {
       console.warn('[Store] Supabase fetch all teams failed:', e.message);

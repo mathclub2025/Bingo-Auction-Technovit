@@ -19,7 +19,7 @@ export async function getTeams(req, res) {
     const teams = await getAllTeamsList();
     return res.json({
       success: true,
-      teams: teams.filter(t => t.role === 'team')
+      teams: teams
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -133,7 +133,7 @@ export async function updateTeamPoints(req, res) {
     });
 
     const allTeams = await getAllTeamsList();
-    broadcastAllTeams(allTeams.filter(t => t.role === 'team'));
+    broadcastAllTeams(allTeams);
 
     // Realtime alert
     broadcastAlert({
@@ -165,7 +165,7 @@ export async function resetAllTeams(req, res) {
   try {
     const resetTeams = await resetAllTeamsToInitial();
     const allTeams = await getAllTeamsList();
-    broadcastAllTeams(allTeams.filter(t => t.role === 'team'));
+    broadcastAllTeams(allTeams);
 
     return res.json({
       success: true,
