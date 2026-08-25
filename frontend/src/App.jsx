@@ -1,5 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { initialTeams } from './data/mockTeams';
+
+const API_BASE_URL = 'http://localhost:5000';
+
+function formatTeam(t) {
+  return {
+    id: t.id,
+    name: t.team_name || t.name || 'Unnamed Team',
+    coins: Number(t.coins) || 0,
+    numbers: Array.isArray(t.numbers_collected) ? t.numbers_collected : (Array.isArray(t.numbers) ? t.numbers : [])
+  };
+}
 
 const formatCoins = (value) =>
   new Intl.NumberFormat('en-IN', {
@@ -33,15 +44,41 @@ function Icon({ name, size = 20 }) {
 
 function App() {
   const [teams, setTeams] = useState(initialTeams);
-  const [selectedTeamId, setSelectedTeamId] = useState(initialTeams[0].id);
+  const [selectedTeamId, setSelectedTeamId] = useState(initialTeams[0]?.id || '');
   const [deduction, setDeduction] = useState('');
   const [answer, setAnswer] = useState('no');
   const [bonus, setBonus] = useState('');
   const [number, setNumber] = useState('');
   const [notice, setNotice] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch real team records from backend API
+  const fetchTeamsFromBackend = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/teams`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.teams && Array.isArray(data.teams) && data.teams.length > 0) {
+          const formatted = data.teams.map(formatTeam);
+          setTeams(formatted);
+          if (!selectedTeamId || !formatted.some(t => t.id === selectedTeamId)) {
+            setSelectedTeamId(formatted[0].id);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Backend server offline or unreachable, using local fallback:', err.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchTeamsFromBackend();
+    const interval = setInterval(fetchTeamsFromBackend, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const selectedTeam = useMemo(
-    () => teams.find((team) => team.id === selectedTeamId) ?? teams[0],
+    () => teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? { id: '', name: '', coins: 0, numbers: [] },
     [selectedTeamId, teams],
   );
 
@@ -58,13 +95,13 @@ function App() {
     resetForm();
   };
 
-  const submitUpdate = (event) => {
+  const submitUpdate = async (event) => {
     event.preventDefault();
     setNotice(null);
 
     const deductionAmount = Number(deduction);
     const bonusAmount = answer === 'yes' ? Number(bonus) : 0;
-    const numberObtained = answer === 'yes' ? Number(number) : null;
+    const numberObtained = answer === 'yes' && number !== '' ? Number(number) : null;
 
     if (!Number.isInteger(deductionAmount) || deductionAmount <= 0) {
       setNotice({ type: 'error', text: 'Enter a valid coin deduction greater than 0.' });
@@ -82,34 +119,65 @@ function App() {
         return;
       }
 
-      if (!Number.isInteger(numberObtained) || numberObtained < 1 || numberObtained > 25) {
+      if (numberObtained !== null && (!Number.isInteger(numberObtained) || numberObtained < 1 || numberObtained > 25)) {
         setNotice({ type: 'error', text: 'Number obtained must be a whole number from 1 to 25.' });
         return;
       }
 
-      if (selectedTeam.numbers.includes(numberObtained)) {
+      if (numberObtained !== null && selectedTeam.numbers.includes(numberObtained)) {
         setNotice({ type: 'error', text: `Number ${numberObtained} is already recorded for this team.` });
         return;
       }
     }
 
-    const coinChange = bonusAmount - deductionAmount;
-    const updatedTeam = {
-      ...selectedTeam,
-      coins: selectedTeam.coins + coinChange,
-      numbers: numberObtained ? [...selectedTeam.numbers, numberObtained] : selectedTeam.numbers,
-    };
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/update-team`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teamId: selectedTeam.id,
+          teamName: selectedTeam.name,
+          coinsDeducted: deductionAmount,
+          questionAnswer: answer,
+          bonusCoins: bonusAmount,
+          numberObtained: numberObtained
+        })
+      });
 
-    setTeams((currentTeams) =>
-      currentTeams.map((team) => (team.id === selectedTeamId ? updatedTeam : team)),
-    );
-    setNotice({
-      type: 'success',
-      text: answer === 'yes'
-        ? `Updated ${selectedTeam.name}: number ${numberObtained} recorded and balance adjusted.`
-        : `Updated ${selectedTeam.name}: ${formatCoins(deductionAmount)} coins deducted.`,
-    });
-    resetForm();
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update team record');
+      }
+
+      await fetchTeamsFromBackend();
+      setNotice({
+        type: 'success',
+        text: answer === 'yes'
+          ? `Updated ${selectedTeam.name}: number ${numberObtained ?? 'none'} recorded and balance adjusted.`
+          : `Updated ${selectedTeam.name}: ${formatCoins(deductionAmount)} coins deducted.`,
+      });
+      resetForm();
+    } catch (err) {
+      // Fallback local update if API fails
+      const coinChange = bonusAmount - deductionAmount;
+      const updatedTeam = {
+        ...selectedTeam,
+        coins: selectedTeam.coins + coinChange,
+        numbers: numberObtained ? [...selectedTeam.numbers, numberObtained] : selectedTeam.numbers,
+      };
+
+      setTeams((currentTeams) =>
+        currentTeams.map((team) => (team.id === selectedTeamId ? updatedTeam : team)),
+      );
+      setNotice({
+        type: 'success',
+        text: `Updated ${selectedTeam.name}: ${formatCoins(deductionAmount)} coins deducted. (Offline mode)`
+      });
+      resetForm();
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
