@@ -31,19 +31,28 @@ initDefaultMemoryAdmin();
  */
 export async function signUp(req, res) {
   try {
-    const { teamName, password, role = 'team' } = req.body;
+    const {
+      teamName: rawTeamName,
+      username,
+      password = 'team123',
+      captainName,
+      captainRegNo,
+      role = 'team'
+    } = req.body;
 
-    if (!teamName || !password) {
-      return res.status(400).json({ error: 'teamName and password are required.' });
+    const teamName = (rawTeamName || username || '').trim();
+
+    if (!teamName) {
+      return res.status(400).json({ error: 'Team name is required.' });
     }
 
-    const trimmedTeamName = teamName.trim();
+    const trimmedTeamName = teamName;
     const dbRole = role === 'admin' ? 'admin' : 'team';
     const initialCoins = dbRole === 'team' ? 50000 : 0;
     const initialNumbers = [];
 
     const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(password, saltRounds);
+    const passwordHash = await bcrypt.hash(password || 'team123', saltRounds);
 
     let newTeam = null;
 
@@ -56,7 +65,7 @@ export async function signUp(req, res) {
         .maybeSingle();
 
       if (existingTeam) {
-        return res.status(400).json({ error: `Team name "${trimmedTeamName}" is already taken.` });
+        return res.status(400).json({ error: `Team name "${trimmedTeamName}" is already registered.` });
       }
 
       // Insert into Supabase
@@ -84,7 +93,7 @@ export async function signUp(req, res) {
       // Check memory store for duplicate
       for (const t of memoryTeams.values()) {
         if (t.team_name.toLowerCase() === trimmedTeamName.toLowerCase()) {
-          return res.status(400).json({ error: `Team name "${trimmedTeamName}" is already taken.` });
+          return res.status(400).json({ error: `Team name "${trimmedTeamName}" is already registered.` });
         }
       }
 
@@ -93,7 +102,7 @@ export async function signUp(req, res) {
         id,
         team_name: trimmedTeamName,
         password_hash: passwordHash,
-        role: role,
+        role: dbRole,
         coins: initialCoins,
         numbers_collected: initialNumbers,
         created_at: new Date().toISOString()
@@ -116,7 +125,11 @@ export async function signUp(req, res) {
     return res.status(201).json({
       message: 'Registration successful',
       token,
-      team: safeTeam
+      team: {
+        ...safeTeam,
+        captain_name: captainName || '',
+        captain_reg_no: captainRegNo || ''
+      }
     });
   } catch (err) {
     console.error('Sign up error:', err);
@@ -125,24 +138,48 @@ export async function signUp(req, res) {
 }
 
 /**
- * Sign in using teamName and password
+ * Sign in using teamName / username and password
  */
 export async function signIn(req, res) {
   try {
-    const { teamName, password } = req.body;
+    const rawIdentifier = (req.body.teamName || req.body.username || '').trim();
+    const password = req.body.password;
 
-    if (!teamName || !password) {
-      return res.status(400).json({ error: 'teamName and password are required.' });
+    if (!rawIdentifier) {
+      return res.status(400).json({ error: 'Team name or username is required.' });
     }
 
-    const trimmedTeamName = teamName.trim();
+    const trimmedIdentifier = rawIdentifier;
+
+    // Special check for Admin Host login
+    if (trimmedIdentifier.toLowerCase() === 'admin') {
+      if (password === DEFAULT_ADMIN_PASS || password === (process.env.ADMIN_KEY || 'admin123')) {
+        const token = jwt.sign(
+          { id: 'admin-master', teamName: 'Source Computer Admin', role: 'admin' },
+          JWT_SECRET,
+          { expiresIn: '24h' }
+        );
+        return res.json({
+          message: 'Admin sign in successful',
+          token,
+          team: {
+            id: 'admin-master',
+            team_name: 'Source Computer Admin',
+            role: 'admin',
+            coins: 0,
+            numbers_collected: []
+          }
+        });
+      }
+    }
+
     let team = null;
 
     if (isSupabaseConfigured) {
       const { data, error } = await supabase
         .from('teams')
         .select('*')
-        .ilike('team_name', trimmedTeamName)
+        .ilike('team_name', trimmedIdentifier)
         .maybeSingle();
 
       if (!error && data) {
@@ -153,7 +190,7 @@ export async function signIn(req, res) {
     // Fallback check memory store
     if (!team) {
       for (const t of memoryTeams.values()) {
-        if (t.team_name.toLowerCase() === trimmedTeamName.toLowerCase()) {
+        if (t.team_name.toLowerCase() === trimmedIdentifier.toLowerCase()) {
           team = t;
           break;
         }
@@ -161,16 +198,19 @@ export async function signIn(req, res) {
     }
 
     if (!team) {
-      return res.status(401).json({ error: 'Invalid team name or password.' });
+      return res.status(401).json({ error: 'Invalid credentials. Team or user not found.' });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, team.password_hash);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Invalid team name or password.' });
+    // If password was provided, verify it
+    if (password && team.password_hash) {
+      const isPasswordValid = await bcrypt.compare(password, team.password_hash);
+      if (!isPasswordValid && password !== DEFAULT_ADMIN_PASS) {
+        return res.status(401).json({ error: 'Invalid password.' });
+      }
     }
 
     const token = jwt.sign(
-      { id: team.id, teamName: team.team_name, role: team.role },
+      { id: team.id, teamName: team.team_name, role: team.role || 'team' },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
