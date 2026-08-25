@@ -1,3 +1,8 @@
+const { Client } = require('pg');
+
+const connectionString = 'postgresql://postgres.lpeyccgizibzfcjdaigr:BingoMathsClub@aws-0-ap-south-1.pooler.supabase.com:5432/postgres';
+
+const sql = `
 -- ============================================================================
 -- 1. EXTENSIONS & CLEANUP
 -- ============================================================================
@@ -88,5 +93,22 @@ ALTER TABLE public.score_audit_logs DISABLE ROW LEVEL SECURITY;
 -- ============================================================================
 -- 8. REALTIME REPLICATION (For Instant Live Dashboard Updates)
 -- ============================================================================
-ALTER PUBLICATION supabase_realtime ADD TABLE public.teams;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.team_members;
+-- ALTER PUBLICATION supabase_realtime ADD TABLE public.teams;
+-- ALTER PUBLICATION supabase_realtime ADD TABLE public.team_members;
+`;
+
+async function initDB() {
+  const client = new Client({ connectionString });
+  try {
+    await client.connect();
+    console.log('Connected to database, running new schema...');
+    await client.query(sql);
+    console.log('New schema executed successfully.');
+  } catch (err) {
+    console.error('Error executing schema:', err);
+  } finally {
+    await client.end();
+  }
+}
+
+initDB();
