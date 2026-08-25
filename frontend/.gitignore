@@ -1,0 +1,13 @@
+# Logs & Dependencies
+node_modules/
+npm-debug.log*
+
+# Build artifacts
+dist/
+dist-ssr/
+*.local
+
+# Editor directories
+.vscode/
+.idea/
+.DS_Store
