@@ -1,69 +1,109 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { initialTeams } from './data/mockTeams';
+import { initialTeamsData, mockAuctionRounds } from './data/mockAuctionState';
+import Topbar from './components/Topbar';
+import LandingPage from './pages/LandingPage';
+import TeamLogin from './pages/TeamLogin';
+import UserDashboard from './pages/UserDashboard';
+import Auction from './pages/Auction';
+import TeamProgress from './pages/TeamProgress';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminModal from './components/AdminModal';
+import { io } from 'socket.io-client';
 
-const API_BASE_URL = 'http://localhost:5000';
+const LOCAL_STORAGE_TEAM_ID_KEY = 'math_club_user_team_id';
+const LOCAL_STORAGE_TEAMS_KEY = 'math_club_user_teams';
 
-function formatTeam(t) {
-  return {
-    id: t.id,
-    name: t.team_name || t.name || 'Unnamed Team',
-    coins: Number(t.coins) || 0,
-    numbers: Array.isArray(t.numbers_collected) ? t.numbers_collected : (Array.isArray(t.numbers) ? t.numbers : [])
+const getInitialPath = () => {
+  const path = window.location.pathname;
+  if (path === '/' || path === '') return '/LandingPage';
+  if (['/LandingPage', '/TeamLogin', '/UserDashboard', '/Auction', '/TeamProgress', '/AdminDashboard'].includes(path)) {
+    return path;
+  }
+  return '/LandingPage';
+};
+
+export default function App() {
+  // Current route pathname & search state
+  const [currentPath, setCurrentPath] = useState(getInitialPath);
+  const [currentSearch, setCurrentSearch] = useState(() => window.location.search);
+  const [adminModalOpen, setAdminModalOpen] = useState(false);
+  const [activeAuctionState, setActiveAuctionState] = useState('active');
+
+  // Router navigation helper
+  const navigate = (toPath, options = {}) => {
+    const [pathPart, searchPart] = toPath.split('?');
+    const fullSearch = searchPart ? `?${searchPart}` : '';
+
+    if (options.replace) {
+      window.history.replaceState(options.state || null, '', toPath);
+    } else {
+      window.history.pushState(options.state || null, '', toPath);
+    }
+    setCurrentPath(pathPart);
+    setCurrentSearch(fullSearch);
+    window.scrollTo(0, 0);
   };
-}
 
-const formatCoins = (value) =>
-  new Intl.NumberFormat('en-IN', {
-    maximumFractionDigits: 0,
-  }).format(value);
+  // Synchronize browser history (Back / Forward buttons)
+  useEffect(() => {
+    const handlePopState = () => {
+      const p = window.location.pathname;
+      if (['/LandingPage', '/TeamLogin', '/UserDashboard', '/Auction', '/TeamProgress', '/AdminDashboard'].includes(p)) {
+        setCurrentPath(p);
+      } else {
+        setCurrentPath('/LandingPage');
+      }
+      setCurrentSearch(window.location.search);
+    };
 
-function Icon({ name, size = 20 }) {
-  const common = {
-    width: size,
-    height: size,
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.9,
-    strokeLinecap: 'round',
-    strokeLinejoin: 'round',
-    'aria-hidden': true,
-  };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
-  const paths = {
-    shield: <path d="M12 3 4.5 6v5c0 5 3.2 8.5 7.5 10 4.3-1.5 7.5-5 7.5-10V6L12 3Z" />,
-    coins: <><circle cx="12" cy="12" r="8.5" /><path d="M14.8 9.4c-.6-.6-1.5-.9-2.7-.9-1.7 0-2.9.8-2.9 2.1 0 3 5.7 1.3 5.7 4.1 0 1.3-1.2 2.2-3 2.2-1.2 0-2.4-.4-3.2-1.1M12 7v10" /></>,
-    grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
-    check: <path d="m5 12 4.2 4.2L19 6.7" />,
-    alert: <><path d="M12 3 2.8 19a1.3 1.3 0 0 0 1.1 2h16.2a1.3 1.3 0 0 0 1.1-2L12 3Z" /><path d="M12 9v4M12 17h.01" /></>,
-    arrow: <><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></>,
-  };
+  // 1. Teams State
+  const [teams, setTeams] = useState(() => {
+    try {
+      const savedTeams = localStorage.getItem(LOCAL_STORAGE_TEAMS_KEY);
+      if (savedTeams) {
+        return JSON.parse(savedTeams);
+      }
+    } catch (err) {
+      console.warn('Could not parse teams from localStorage:', err);
+    }
+    return initialTeamsData;
+  });
 
-  return <svg {...common}>{paths[name]}</svg>;
-}
-
-function App() {
-  const [teams, setTeams] = useState(initialTeams);
-  const [selectedTeamId, setSelectedTeamId] = useState(initialTeams[0]?.id || '');
-  const [deduction, setDeduction] = useState('');
-  const [answer, setAnswer] = useState('no');
-  const [bonus, setBonus] = useState('');
-  const [number, setNumber] = useState('');
-  const [notice, setNotice] = useState(null);
-  const [loading, setLoading] = useState(false);
+  // 2. Selected Team ID
+  const [selectedTeamId, setSelectedTeamId] = useState(() => {
+    try {
+      const savedTeamId = localStorage.getItem(LOCAL_STORAGE_TEAM_ID_KEY);
+      if (savedTeamId) {
+        return savedTeamId;
+      }
+    } catch (err) {
+      console.warn('Could not read team ID from localStorage:', err);
+    }
+    return null;
+  });
 
   // Fetch real team records from backend API
   const fetchTeamsFromBackend = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/teams`);
+      const res = await fetch('http://localhost:5000/api/teams');
       if (res.ok) {
         const data = await res.json();
         if (data.teams && Array.isArray(data.teams) && data.teams.length > 0) {
-          const formatted = data.teams.map(formatTeam);
+          const formatted = data.teams.map((t, idx) => ({
+            id: t.id,
+            number: idx + 1,
+            name: t.team_name || t.name || 'Unnamed Team',
+            coins: Number(t.coins) || 0,
+            numbers: Array.isArray(t.numbers_collected) ? t.numbers_collected : (Array.isArray(t.numbers) ? t.numbers : []),
+            rank: idx + 1,
+            members: t.members || [],
+            captain: { name: t.captain_name || '', regNo: t.captain_reg_no || '' }
+          }));
           setTeams(formatted);
-          if (!selectedTeamId || !formatted.some(t => t.id === selectedTeamId)) {
-            setSelectedTeamId(formatted[0].id);
-          }
         }
       }
     } catch (err) {
@@ -73,302 +113,288 @@ function App() {
 
   useEffect(() => {
     fetchTeamsFromBackend();
-    const interval = setInterval(fetchTeamsFromBackend, 3000);
-    return () => clearInterval(interval);
+
+    const socket = io('http://localhost:5000', {
+      transports: ['websocket', 'polling'],
+    });
+
+    socket.on('connect', () => {
+      console.log('⚡ Connected to live Math Club auction socket server');
+      socket.emit('join_dashboard', { role: 'participant' });
+    });
+
+    socket.on('teams:updated', (payload) => {
+      console.log('📡 Live teams update received via WebSocket:', payload);
+      if (payload && Array.isArray(payload.teams)) {
+        const formatted = payload.teams.map((t, idx) => ({
+          id: t.id,
+          number: idx + 1,
+          name: t.team_name || t.name,
+          team_name: t.team_name || t.name,
+          coins: Number(t.coins) || 0,
+          numbers: Array.isArray(t.numbers_collected) ? t.numbers_collected : (Array.isArray(t.numbers) ? t.numbers : []),
+          rank: idx + 1,
+          members: t.members || [],
+          captain: { name: t.captain_name || '', regNo: t.captain_reg_no || '' }
+        }));
+        setTeams(formatted);
+      }
+    });
+
+    socket.on('team:updated', () => {
+      fetchTeamsFromBackend();
+    });
+
+    const interval = setInterval(fetchTeamsFromBackend, 2000);
+
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, []);
 
-  const selectedTeam = useMemo(
-    () => teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? { id: '', name: '', coins: 0, numbers: [] },
-    [selectedTeamId, teams],
-  );
-
-  const resetForm = () => {
-    setDeduction('');
-    setAnswer('no');
-    setBonus('');
-    setNumber('');
-  };
-
-  const selectTeam = (teamId) => {
-    setSelectedTeamId(teamId);
-    setNotice(null);
-    resetForm();
-  };
-
-  const submitUpdate = async (event) => {
-    event.preventDefault();
-    setNotice(null);
-
-    const deductionAmount = Number(deduction);
-    const bonusAmount = answer === 'yes' ? Number(bonus) : 0;
-    const numberObtained = answer === 'yes' && number !== '' ? Number(number) : null;
-
-    if (!Number.isInteger(deductionAmount) || deductionAmount <= 0) {
-      setNotice({ type: 'error', text: 'Enter a valid coin deduction greater than 0.' });
-      return;
-    }
-
-    if (deductionAmount > selectedTeam.coins) {
-      setNotice({ type: 'error', text: 'The deduction cannot exceed this team’s current coins.' });
-      return;
-    }
-
-    if (answer === 'yes') {
-      if (!Number.isInteger(bonusAmount) || bonusAmount < 0) {
-        setNotice({ type: 'error', text: 'Enter a valid bonus amount of 0 or more.' });
-        return;
-      }
-
-      if (numberObtained !== null && (!Number.isInteger(numberObtained) || numberObtained < 1 || numberObtained > 25)) {
-        setNotice({ type: 'error', text: 'Number obtained must be a whole number from 1 to 25.' });
-        return;
-      }
-
-      if (numberObtained !== null && selectedTeam.numbers.includes(numberObtained)) {
-        setNotice({ type: 'error', text: `Number ${numberObtained} is already recorded for this team.` });
-        return;
-      }
-    }
-
-    setLoading(true);
+  // Persist teams to localStorage
+  useEffect(() => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/admin/update-team`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          teamId: selectedTeam.id,
-          teamName: selectedTeam.name,
-          coinsDeducted: deductionAmount,
-          questionAnswer: answer,
-          bonusCoins: bonusAmount,
-          numberObtained: numberObtained
-        })
-      });
-
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to update team record');
-      }
-
-      await fetchTeamsFromBackend();
-      setNotice({
-        type: 'success',
-        text: answer === 'yes'
-          ? `Updated ${selectedTeam.name}: number ${numberObtained ?? 'none'} recorded and balance adjusted.`
-          : `Updated ${selectedTeam.name}: ${formatCoins(deductionAmount)} coins deducted.`,
-      });
-      resetForm();
+      localStorage.setItem(LOCAL_STORAGE_TEAMS_KEY, JSON.stringify(teams));
     } catch (err) {
-      // Fallback local update if API fails
-      const coinChange = bonusAmount - deductionAmount;
-      const updatedTeam = {
-        ...selectedTeam,
-        coins: selectedTeam.coins + coinChange,
-        numbers: numberObtained ? [...selectedTeam.numbers, numberObtained] : selectedTeam.numbers,
-      };
-
-      setTeams((currentTeams) =>
-        currentTeams.map((team) => (team.id === selectedTeamId ? updatedTeam : team)),
-      );
-      setNotice({
-        type: 'success',
-        text: `Updated ${selectedTeam.name}: ${formatCoins(deductionAmount)} coins deducted. (Offline mode)`
-      });
-      resetForm();
-    } finally {
-      setLoading(false);
+      console.warn('Failed to save teams to localStorage:', err);
     }
+  }, [teams]);
+
+  const emptyTeamFallback = {
+    id: '',
+    number: 1,
+    name: 'No Team Selected',
+    coins: 50000,
+    numbers: [],
+    rank: 1,
+    captain: { name: '', regNo: '' },
+    members: []
   };
 
+  // Computed active team object
+  const activeTeam = useMemo(() => {
+    if (!selectedTeamId) return teams[0] || emptyTeamFallback;
+    return teams.find((t) => String(t.id) === String(selectedTeamId)) || teams[0] || emptyTeamFallback;
+  }, [selectedTeamId, teams]);
+
+  // Team authentication submission handler
+  const handleTeamSubmit = (submittedTeam) => {
+    const formatted = {
+      ...submittedTeam,
+      id: submittedTeam.id,
+      name: submittedTeam.team_name || submittedTeam.name,
+      coins: submittedTeam.coins ?? 50000,
+      numbers: submittedTeam.numbers_collected || submittedTeam.numbers || [],
+      captain: {
+        name: submittedTeam.captain_name || submittedTeam.captain?.name || '',
+        regNo: submittedTeam.captain_reg_no || submittedTeam.captain?.regNo || '',
+      },
+      members: submittedTeam.members || (submittedTeam.captain_name ? [
+        {
+          name: submittedTeam.captain_name,
+          regNo: submittedTeam.captain_reg_no,
+          role: 'Captain',
+          addedAt: 'Initial Registration',
+        }
+      ] : []),
+    };
+
+    setTeams((prevTeams) => {
+      const exists = prevTeams.some((t) => String(t.id) === String(formatted.id));
+      if (exists) {
+        return prevTeams.map((t) => (String(t.id) === String(formatted.id) ? { ...t, ...formatted } : t));
+      }
+      return [...prevTeams, formatted];
+    });
+
+    setSelectedTeamId(formatted.id);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_TEAM_ID_KEY, String(formatted.id));
+    } catch (err) {
+      console.warn('Could not save team ID to localStorage:', err);
+    }
+
+    navigate('/UserDashboard');
+  };
+
+  // Teammate added handler
+  const handleAddTeammate = (teamIdOrMember, maybeMember) => {
+    const newTeammate = maybeMember || teamIdOrMember;
+    const targetTeamId = maybeMember ? teamIdOrMember : activeTeam.id;
+
+    setTeams((prevTeams) =>
+      prevTeams.map((t) => {
+        if (String(t.id) === String(targetTeamId)) {
+          const currentMembers = Array.isArray(t.members) ? t.members : [];
+          if (currentMembers.some(m => (m.reg_no || m.regNo) === (newTeammate.reg_no || newTeammate.regNo))) {
+            return t;
+          }
+          return {
+            ...t,
+            members: [...currentMembers, newTeammate],
+          };
+        }
+        return t;
+      })
+    );
+    setTimeout(fetchTeamsFromBackend, 500);
+  };
+
+  // Team switch / logout handler
+  const handleSwitchTeam = () => {
+    setSelectedTeamId(null);
+    try {
+      localStorage.removeItem(LOCAL_STORAGE_TEAM_ID_KEY);
+      removeToken();
+    } catch (err) {
+      console.warn('Error clearing team auth from storage:', err);
+    }
+    navigate('/LandingPage');
+  };
+
+  // Coin balance update handler
+  const handleUpdateTeamCoins = (teamId, newCoins) => {
+    setTeams((prev) =>
+      prev.map((t) => (String(t.id) === String(teamId) ? { ...t, coins: newCoins } : t))
+    );
+  };
+
+  // Add number handler
+  const handleAddTeamNumber = (teamId, numberToAdd) => {
+    setTeams((prev) =>
+      prev.map((t) => {
+        if (String(t.id) === String(teamId)) {
+          const numbers = t.numbers || [];
+          if (!numbers.includes(numberToAdd)) {
+            return { ...t, numbers: [...numbers, numberToAdd] };
+          }
+        }
+        return t;
+      })
+    );
+  };
+
+  // Handler for Landing Page CTAs ('register' or 'entry')
+  const handleLandingEnter = (tabMode) => {
+    const tab = tabMode === 'entry' ? 'entry' : 'register';
+    navigate(`/TeamLogin?tab=${tab}`);
+  };
+
+  // Determine initial tab for TeamLogin page from URL search params
+  const getTeamLoginInitialTab = () => {
+    const params = new URLSearchParams(currentSearch);
+    const tabParam = params.get('tab');
+    if (tabParam === 'entry') return 'entry';
+    return 'register';
+  };
+
+  // Navigation mapper for Topbar
+  const handleViewChange = (view) => {
+    if (view === 'user-dashboard') navigate('/UserDashboard');
+    else if (view === 'user-auction') navigate('/Auction');
+    else if (view === 'user-progress') navigate('/TeamProgress');
+    else if (view === 'admin') navigate('/AdminDashboard');
+    else if (view === 'landing') navigate('/LandingPage');
+    else if (view === 'team-login') navigate('/TeamLogin');
+  };
+
+  // Determine current active view string for tabs
+  const activeViewName = useMemo(() => {
+    if (currentPath === '/Auction') return 'user-auction';
+    if (currentPath === '/TeamProgress') return 'user-progress';
+    if (currentPath === '/AdminDashboard') return 'admin';
+    return 'user-dashboard';
+  }, [currentPath]);
+
+  // ROUTE 1: Landing Page (/LandingPage)
+  if (currentPath === '/LandingPage') {
+    return <LandingPage onEnterAuction={handleLandingEnter} teams={teams} />;
+  }
+
+  // ROUTE 2: Team Login Page (/TeamLogin)
+  if (currentPath === '/TeamLogin') {
+    return (
+      <TeamLogin
+        teams={teams}
+        initialTab={getTeamLoginInitialTab()}
+        onTeamSubmit={handleTeamSubmit}
+        onBackToLanding={() => navigate('/LandingPage')}
+      />
+    );
+  }
+
+  // ROUTE 3: Admin Dashboard Desk (/AdminDashboard)
+  if (currentPath === '/AdminDashboard') {
+    return (
+      <AdminDashboard
+        onSwitchToUserView={() => navigate(selectedTeamId ? '/UserDashboard' : '/LandingPage')}
+      />
+    );
+  }
+
+  // ROUTE GUARD: If accessing UserDashboard without logging in, show Team Entry
+  if (['/UserDashboard', '/Auction', '/TeamProgress'].includes(currentPath) && !selectedTeamId) {
+    return (
+      <TeamLogin
+        teams={teams}
+        initialTab="entry"
+        onTeamSubmit={handleTeamSubmit}
+        onBackToLanding={() => navigate('/LandingPage')}
+      />
+    );
+  }
+
+  // MAIN PORTAL (UserDashboard, Auction, TeamProgress) - Clean Full Width
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark"><Icon name="grid" size={19} /></div>
-          <div>
-            <p className="eyebrow">VIT Chennai · Mathematics Club</p>
-            <h1>Math Club Auction</h1>
-          </div>
-        </div>
-        <div className="admin-status" aria-label="Admin status">
-          <span className="status-dot" />
-          <span>Source computer · Admin</span>
-        </div>
-      </header>
+    <div className="figma-portal-shell full-width">
+      <div className="figma-main-area">
+        {/* Top Navbar */}
+        <Topbar
+          currentView={activeViewName}
+          onViewChange={handleViewChange}
+          activeTeamNumber={activeTeam.number || 1}
+          activeTeamName={activeTeam.name || activeTeam.team_name}
+          activeTeamCoins={activeTeam.coins}
+          onSwitchTeam={handleSwitchTeam}
+          onOpenAdmin={() => handleViewChange('admin')}
+        />
 
-      <section className="page-intro" aria-labelledby="dashboard-title">
-        <div>
-          <p className="section-kicker">Auction control desk</p>
-          <h2 id="dashboard-title">Team records</h2>
-          <p>Review standings and update one team at a time.</p>
-        </div>
-        <div className="secured-note"><Icon name="shield" size={17} /> Editing access enabled</div>
-      </section>
+        {/* Dynamic Route Content */}
+        <main className="figma-content-viewport">
+          {currentPath === '/UserDashboard' && (
+            <UserDashboard
+              activeTeam={activeTeam}
+              teams={teams}
+              activeRoundName={mockAuctionRounds.roundName}
+              onNavigate={handleViewChange}
+              onAddTeammate={handleAddTeammate}
+            />
+          )}
 
-      <section className="dashboard-grid">
-        <article className="team-summary card" aria-labelledby="selected-team-title">
-          <div className="card-heading">
-            <div>
-              <p className="section-kicker">Selected team</p>
-              <h2 id="selected-team-title">{selectedTeam.name}</h2>
-            </div>
-            <span className="team-index">#{teams.findIndex((team) => team.id === selectedTeam.id) + 1}</span>
-          </div>
+          {currentPath === '/Auction' && (
+            <Auction
+              activeTeam={activeTeam}
+              onUpdateTeamCoins={handleUpdateTeamCoins}
+              onAddTeamNumber={handleAddTeamNumber}
+              activeAuctionState={activeAuctionState}
+              setActiveAuctionState={setActiveAuctionState}
+            />
+          )}
 
-          <div className="summary-metrics">
-            <div className="metric">
-              <div className="metric-icon coin-icon"><Icon name="coins" size={20} /></div>
-              <div>
-                <span>Current coins</span>
-                <strong>₹ {formatCoins(selectedTeam.coins)}</strong>
-              </div>
-            </div>
-            <div className="metric">
-              <div className="metric-icon number-icon"><Icon name="grid" size={19} /></div>
-              <div>
-                <span>Numbers collected</span>
-                <strong>{selectedTeam.numbers.length}</strong>
-              </div>
-            </div>
-          </div>
+          {currentPath === '/TeamProgress' && (
+            <TeamProgress activeTeam={activeTeam} />
+          )}
+        </main>
+      </div>
 
-          <div className="numbers-box">
-            <span>Numbers obtained</span>
-            {selectedTeam.numbers.length > 0 ? (
-              <div className="number-chips" aria-label="Numbers obtained">
-                {selectedTeam.numbers.map((teamNumber) => <b key={teamNumber}>{teamNumber}</b>)}
-              </div>
-            ) : (
-              <p>No numbers collected yet.</p>
-            )}
-          </div>
-        </article>
-
-        <section className="update-panel card" aria-labelledby="update-title">
-          <div className="card-heading form-heading">
-            <div>
-              <p className="section-kicker">Source computer controls</p>
-              <h2 id="update-title">Update team record</h2>
-            </div>
-          </div>
-
-          <form onSubmit={submitUpdate} noValidate>
-            <label>
-              <span>Team name</span>
-              <select value={selectedTeamId} onChange={(event) => selectTeam(event.target.value)}>
-                {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-              </select>
-            </label>
-
-            <label>
-              <span>Coins to deduct</span>
-              <div className="input-with-prefix">
-                <span>₹</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  inputMode="numeric"
-                  placeholder="e.g. 5,000"
-                  value={deduction}
-                  onChange={(event) => setDeduction(event.target.value)}
-                />
-              </div>
-            </label>
-
-            <fieldset>
-              <legend>Question answer</legend>
-              <div className="answer-toggle">
-                <button type="button" className={answer === 'no' ? 'active no-answer' : ''} onClick={() => setAnswer('no')}>No</button>
-                <button type="button" className={answer === 'yes' ? 'active yes-answer' : ''} onClick={() => setAnswer('yes')}>Yes</button>
-              </div>
-            </fieldset>
-
-            {answer === 'yes' && (
-              <div className="conditional-fields">
-                <label>
-                  <span>Bonus coins</span>
-                  <div className="input-with-prefix">
-                    <span>₹</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      inputMode="numeric"
-                      placeholder="e.g. 2,000"
-                      value={bonus}
-                      onChange={(event) => setBonus(event.target.value)}
-                    />
-                  </div>
-                </label>
-                <label>
-                  <span>Number obtained</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="25"
-                    step="1"
-                    inputMode="numeric"
-                    placeholder="1–25"
-                    value={number}
-                    onChange={(event) => setNumber(event.target.value)}
-                  />
-                </label>
-              </div>
-            )}
-
-            {notice && (
-              <div className={`notice ${notice.type}`} role="status">
-                <Icon name={notice.type === 'success' ? 'check' : 'alert'} size={18} />
-                <span>{notice.text}</span>
-              </div>
-            )}
-
-            <button className="update-button" type="submit">
-              Update record <Icon name="arrow" size={18} />
-            </button>
-          </form>
-        </section>
-      </section>
-
-      <section className="standings card" aria-labelledby="standings-title">
-        <div className="standings-heading">
-          <div>
-            <p className="section-kicker">View only</p>
-            <h2 id="standings-title">All team records</h2>
-          </div>
-          <span>{teams.length} registered teams</span>
-        </div>
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Team</th>
-                <th>Coins</th>
-                <th>Numbers collected</th>
-                <th aria-label="Select team" />
-              </tr>
-            </thead>
-            <tbody>
-              {teams.map((team) => (
-                <tr key={team.id} className={team.id === selectedTeamId ? 'selected-row' : ''}>
-                  <td><strong>{team.name}</strong>{team.id === selectedTeamId && <span className="selected-tag">Selected</span>}</td>
-                  <td className="coins-cell">₹ {formatCoins(team.coins)}</td>
-                  <td>
-                    {team.numbers.length ? (
-                      <div className="table-numbers">{team.numbers.map((teamNumber) => <span key={teamNumber}>{teamNumber}</span>)}</div>
-                    ) : <span className="empty-value">None</span>}
-                  </td>
-                  <td><button className="select-button" type="button" onClick={() => selectTeam(team.id)}>Select</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </main>
+      {/* Admin Modal */}
+      <AdminModal
+        isOpen={adminModalOpen}
+        onClose={() => setAdminModalOpen(false)}
+        teams={teams}
+      />
+    </div>
   );
 }
-
-export default App;
