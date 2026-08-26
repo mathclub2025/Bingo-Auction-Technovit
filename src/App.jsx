@@ -5,13 +5,66 @@ import Topbar from './components/Topbar';
 import LandingPage from './pages/LandingPage';
 import TeamLogin from './pages/TeamLogin';
 import UserDashboard from './pages/UserDashboard';
-import Auction from './pages/Auction';
-import TeamProgress from './pages/TeamProgress';
 
 const LOCAL_STORAGE_TEAM_ID_KEY = 'math_club_user_team_id';
 const LOCAL_STORAGE_TEAMS_KEY = 'math_club_user_teams';
 
+const getInitialPath = () => {
+  const path = window.location.pathname;
+  if (path === '/' || path === '') return '/LandingPage';
+  if (['/LandingPage', '/TeamLogin', '/UserDashboard'].includes(path)) return path;
+  return '/LandingPage';
+};
+
 export default function App() {
+  // Current route pathname & search state
+  const [currentPath, setCurrentPath] = useState(getInitialPath);
+  const [currentSearch, setCurrentSearch] = useState(() => window.location.search);
+
+  // Router navigation helper
+  const navigate = (toPath, options = {}) => {
+    const [pathPart, searchPart] = toPath.split('?');
+    const fullSearch = searchPart ? `?${searchPart}` : '';
+    
+    if (options.replace) {
+      window.history.replaceState(options.state || null, '', toPath);
+    } else {
+      window.history.pushState(options.state || null, '', toPath);
+    }
+    
+    setCurrentPath(pathPart);
+    setCurrentSearch(fullSearch);
+    window.scrollTo(0, 0);
+  };
+
+  // Sync with browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (path === '/' || path === '') {
+        window.history.replaceState(null, '', '/LandingPage');
+        setCurrentPath('/LandingPage');
+      } else if (['/LandingPage', '/TeamLogin', '/UserDashboard'].includes(path)) {
+        setCurrentPath(path);
+      } else {
+        window.history.replaceState(null, '', '/LandingPage');
+        setCurrentPath('/LandingPage');
+      }
+      setCurrentSearch(window.location.search);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Redirect root '/' -> '/LandingPage' on initial load
+  useEffect(() => {
+    if (window.location.pathname === '/' || window.location.pathname === '') {
+      window.history.replaceState(null, '', '/LandingPage');
+      setCurrentPath('/LandingPage');
+    }
+  }, []);
+
   // 1. Initialize Teams from localStorage or fallback to initialTeamsData
   const [teams, setTeams] = useState(() => {
     try {
@@ -38,16 +91,8 @@ export default function App() {
     return null;
   });
 
-  // 3. Initialize currentView based on whether a team is already logged in
-  const [currentView, setCurrentView] = useState(() => {
-    const savedTeamId = localStorage.getItem(LOCAL_STORAGE_TEAM_ID_KEY);
-    return savedTeamId ? 'user-dashboard' : 'landing';
-  });
-
-  // 4. Collapsible Sidebar state - CLOSED BY DEFAULT
+  // Collapsible Sidebar state
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const [activeAuctionState, setActiveAuctionState] = useState('active');
 
   // Handle Escape key to close sidebar
   useEffect(() => {
@@ -75,26 +120,6 @@ export default function App() {
     return teams.find((t) => t.id === selectedTeamId) || teams[0];
   }, [selectedTeamId, teams]);
 
-  // Update coins handler
-  const handleUpdateTeamCoins = (teamId, newCoins) => {
-    setTeams((currentTeams) =>
-      currentTeams.map((t) => (t.id === teamId ? { ...t, coins: newCoins } : t))
-    );
-  };
-
-  // Add acquired number handler
-  const handleAddTeamNumber = (teamId, number) => {
-    setTeams((currentTeams) =>
-      currentTeams.map((t) => {
-        if (t.id === teamId) {
-          if (t.numbers.includes(number)) return t;
-          return { ...t, numbers: [...t.numbers, number] };
-        }
-        return t;
-      })
-    );
-  };
-
   // Team login / submission handler
   const handleTeamSubmit = (submittedTeam) => {
     const teamExists = teams.some((t) => t.id === submittedTeam.id);
@@ -108,7 +133,7 @@ export default function App() {
     } catch (err) {
       console.warn('Failed to save selected team ID to localStorage:', err);
     }
-    setCurrentView('user-dashboard');
+    navigate('/UserDashboard');
     setSidebarOpen(false);
   };
 
@@ -120,120 +145,147 @@ export default function App() {
       console.warn('Failed to clear team ID from localStorage:', err);
     }
     setSelectedTeamId(null);
-    setCurrentView('team-login');
+    navigate('/TeamLogin?tab=entry');
     setSidebarOpen(false);
   };
 
-  const handlePlaceBidShortcut = () => {
-    setCurrentView('user-auction');
-    setActiveAuctionState('active');
-    setSidebarOpen(false);
+  // Add teammate handler
+  const handleAddTeammate = (teamId, newTeammate) => {
+    setTeams((currentTeams) =>
+      currentTeams.map((t) => {
+        if (t.id === teamId) {
+          const currentMembers = t.members || [];
+          // Avoid duplicate reg numbers
+          if (currentMembers.some((m) => m.regNo.toUpperCase() === newTeammate.regNo.toUpperCase())) {
+            return t;
+          }
+          return {
+            ...t,
+            members: [...currentMembers, newTeammate],
+          };
+        }
+        return t;
+      })
+    );
   };
 
-  // Render Full-page views (Landing Page / Team Entry Login)
-  if (currentView === 'landing') {
-    return <LandingPage onEnterAuction={() => setCurrentView('team-login')} />;
+  // Handler for Landing Page CTAs ('register' or 'entry')
+  const handleLandingEnter = (tabMode) => {
+    const tab = tabMode === 'entry' ? 'entry' : 'register';
+    navigate(`/TeamLogin?tab=${tab}`);
+  };
+
+  // Determine initial tab for TeamLogin page from URL search params
+  const getTeamLoginInitialTab = () => {
+    const params = new URLSearchParams(currentSearch);
+    const tabParam = params.get('tab');
+    if (tabParam === 'entry') return 'entry';
+    return 'register';
+  };
+
+  // ROUTE 1: Landing Page (/LandingPage)
+  if (currentPath === '/LandingPage') {
+    return <LandingPage onEnterAuction={handleLandingEnter} />;
   }
 
-  if (currentView === 'team-login') {
+  // ROUTE 2: Team Login Page (/TeamLogin)
+  if (currentPath === '/TeamLogin') {
     return (
       <TeamLogin
         teams={teams}
+        initialTab={getTeamLoginInitialTab()}
         onTeamSubmit={handleTeamSubmit}
-        onBackToLanding={() => setCurrentView('landing')}
+        onBackToLanding={() => navigate('/LandingPage')}
       />
     );
   }
 
-  // Render Authenticated / Team Portal View with Topbar & Sidebar
-  return (
-    <div className={`figma-portal-shell ${sidebarOpen ? 'sidebar-is-open' : 'sidebar-is-closed'}`}>
-      {/* Mobile/Tablet Backdrop Overlay */}
-      {sidebarOpen && (
-        <div
-          className="sidebar-backdrop"
-          onClick={() => setSidebarOpen(false)}
-          title="Click to close sidebar"
-          aria-label="Close sidebar overlay"
-        />
-      )}
+  // ROUTE 3: User Dashboard Page (/UserDashboard)
+  if (currentPath === '/UserDashboard') {
+    return (
+      <div className={`figma-portal-shell ${sidebarOpen ? 'sidebar-is-open' : 'sidebar-is-closed'}`}>
+        {/* Mobile/Tablet Backdrop Overlay */}
+        {sidebarOpen && (
+          <div
+            className="sidebar-backdrop"
+            onClick={() => setSidebarOpen(false)}
+            title="Click to close sidebar"
+            aria-label="Close sidebar overlay"
+          />
+        )}
 
-      {/* Collapsible Left Sidebar Navigation */}
-      <Sidebar
-        currentView={currentView}
-        onViewChange={setCurrentView}
-        activeTeamName={activeTeam.name}
-        activeRoundName={mockAuctionRounds.roundName}
-        onPlaceBidClick={handlePlaceBidShortcut}
-        onSwitchTeam={handleSwitchTeam}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
-
-      {/* Main Area on the Right */}
-      <div className="figma-main-area">
-        {/* Top Navbar */}
-        <Topbar
-          currentView={currentView}
-          onViewChange={setCurrentView}
-          activeTeamNumber={activeTeam.number}
+        {/* Collapsible Left Sidebar Navigation */}
+        <Sidebar
+          currentView="user-dashboard"
+          onViewChange={(view) => {
+            if (view === 'landing') navigate('/LandingPage');
+            if (view === 'team-login') navigate('/TeamLogin');
+          }}
           activeTeamName={activeTeam.name}
-          activeTeamCoins={activeTeam.coins}
+          activeRoundName={mockAuctionRounds.roundName}
           onSwitchTeam={handleSwitchTeam}
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
 
-        {/* Dynamic Route Content */}
-        <main className="figma-content-viewport">
-          {currentView === 'user-dashboard' && (
+        {/* Main Area on the Right */}
+        <div className="figma-main-area">
+          {/* Top Navbar */}
+          <Topbar
+            currentView="user-dashboard"
+            onViewChange={(view) => {
+              if (view === 'landing') navigate('/LandingPage');
+              if (view === 'team-login') navigate('/TeamLogin');
+            }}
+            activeTeamNumber={activeTeam.number}
+            activeTeamName={activeTeam.name}
+            activeTeamCoins={activeTeam.coins}
+            onSwitchTeam={handleSwitchTeam}
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+          />
+
+          {/* Dynamic Route Content */}
+          <main className="figma-content-viewport">
             <UserDashboard
               activeTeam={activeTeam}
               teams={teams}
               activeRoundName={mockAuctionRounds.roundName}
-              onNavigate={setCurrentView}
+              onNavigate={(view) => {
+                if (view === 'landing') navigate('/LandingPage');
+                if (view === 'team-login') navigate('/TeamLogin');
+              }}
+              onAddTeammate={handleAddTeammate}
             />
-          )}
+          </main>
+        </div>
 
-          {currentView === 'user-auction' && (
-            <Auction
-              activeTeam={activeTeam}
-              onUpdateTeamCoins={handleUpdateTeamCoins}
-              onAddTeamNumber={handleAddTeamNumber}
-              activeAuctionState={activeAuctionState}
-              setActiveAuctionState={setActiveAuctionState}
-            />
-          )}
-
-          {currentView === 'user-progress' && (
-            <TeamProgress
-              activeTeam={activeTeam}
-            />
-          )}
-        </main>
+        {/* Dev Team Quick Switcher */}
+        <div className="floating-dev-switcher" title="Simulate different team viewpoints">
+          <label htmlFor="dev-team-selector">Simulate Team: </label>
+          <select
+            id="dev-team-selector"
+            value={selectedTeamId || ''}
+            onChange={(e) => {
+              const teamId = e.target.value;
+              if (teamId) {
+                setSelectedTeamId(teamId);
+                localStorage.setItem(LOCAL_STORAGE_TEAM_ID_KEY, teamId);
+              }
+            }}
+          >
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} (Team #{t.number})
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+    );
+  }
 
-      {/* Dev Team Quick Switcher */}
-      <div className="floating-dev-switcher" title="Simulate different team viewpoints">
-        <label htmlFor="dev-team-selector">Simulate Team: </label>
-        <select
-          id="dev-team-selector"
-          value={selectedTeamId || ''}
-          onChange={(e) => {
-            const teamId = e.target.value;
-            if (teamId) {
-              setSelectedTeamId(teamId);
-              localStorage.setItem(LOCAL_STORAGE_TEAM_ID_KEY, teamId);
-            }
-          }}
-        >
-          {teams.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} (Team #{t.number})
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
-  );
+  // Fallback redirect for unknown routes
+  return <LandingPage onEnterAuction={handleLandingEnter} />;
 }
+

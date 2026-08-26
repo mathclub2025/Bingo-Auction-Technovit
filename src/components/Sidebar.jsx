@@ -62,37 +62,7 @@ export default function Sidebar({
           <Icon name="grid" size={17} />
           <span>Dashboard</span>
         </button>
-
-        <button
-          className={`menu-item ${currentView === 'user-auction' ? 'active' : ''}`}
-          onClick={() => handleNavClick('user-auction')}
-          type="button"
-        >
-          <Icon name="coins" size={17} />
-          <span>Current Auction</span>
-        </button>
-
-        <button
-          className={`menu-item ${currentView === 'user-progress' ? 'active' : ''}`}
-          onClick={() => handleNavClick('user-progress')}
-          type="button"
-        >
-          <Icon name="user" size={17} />
-          <span>Team Progress</span>
-        </button>
       </nav>
-
-      {/* Place Bid CTA */}
-      <div className="sidebar-cta-container">
-        <button
-          className="sidebar-cta-btn"
-          onClick={handleBidClick}
-          type="button"
-        >
-          <Icon name="coins" size={15} />
-          <span>Place Bid</span>
-        </button>
-      </div>
 
       {/* Bottom Rules / Support Links */}
       <div className="sidebar-footer">

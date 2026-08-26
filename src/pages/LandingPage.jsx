@@ -2,6 +2,14 @@ import React from 'react';
 import Icon from '../components/Icon';
 
 export default function LandingPage({ onEnterAuction }) {
+  const handleRegisterClick = () => {
+    if (onEnterAuction) onEnterAuction('register');
+  };
+
+  const handleEntryClick = () => {
+    if (onEnterAuction) onEnterAuction('entry');
+  };
+
   return (
     <div className="landing-page-container">
       {/* Hero Header Section */}
@@ -23,11 +31,11 @@ export default function LandingPage({ onEnterAuction }) {
         <div className="landing-cta-group">
           <button
             className="landing-primary-btn"
-            onClick={onEnterAuction}
+            onClick={handleRegisterClick}
             type="button"
           >
-            <Icon name="coins" size={18} />
-            <span>Enter Auction Portal</span>
+            <Icon name="user" size={18} />
+            <span>Register Team</span>
           </button>
         </div>
       </section>
@@ -69,15 +77,17 @@ export default function LandingPage({ onEnterAuction }) {
       <section className="figma-card landing-overview-banner">
         <div className="overview-content">
           <h2>Ready to compete?</h2>
-          <p>Provide your team name to join the live auction viewing and bidding dashboard.</p>
+          <p>Enter your registered team name to access the live dashboard.</p>
         </div>
-        <button
-          className="landing-secondary-btn"
-          onClick={onEnterAuction}
-          type="button"
-        >
-          <span>Continue to Team Entry →</span>
-        </button>
+        <div className="landing-overview-cta-group">
+          <button
+            className="landing-secondary-btn"
+            onClick={handleEntryClick}
+            type="button"
+          >
+            <span>Continue to Team Entry →</span>
+          </button>
+        </div>
       </section>
 
       {/* Footer */}
@@ -87,3 +97,4 @@ export default function LandingPage({ onEnterAuction }) {
     </div>
   );
 }
+

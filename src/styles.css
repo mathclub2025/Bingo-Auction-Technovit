@@ -1659,6 +1659,24 @@ tbody tr:hover td { box-shadow: inset 0 1px 0 rgba(213,225,241,.85), inset 0 -1p
   font-size: 0.92rem;
 }
 
+.landing-overview-cta-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .landing-overview-cta-group {
+    flex-direction: column;
+    width: 100%;
+  }
+  .landing-overview-cta-group button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .landing-footer {
   margin-top: auto;
   padding-top: 32px;
@@ -1946,6 +1964,385 @@ tbody tr:hover td { box-shadow: inset 0 1px 0 rgba(213,225,241,.85), inset 0 -1p
   }
   .landing-overview-banner button {
     justify-content: center;
+  }
+}
+
+/* ==========================================================================
+   TEAM REGISTRATION FLOW & TEAMMATES MANAGEMENT STYLES
+   ========================================================================== */
+
+/* Login Tabs */
+.login-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: #f1f5f9;
+  padding: 5px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.login-tabs .tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.login-tabs .tab-btn:hover {
+  color: #1e293b;
+}
+
+.login-tabs .tab-btn.active {
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* Quick Select Registered Team Chips */
+.quick-select-teams {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+
+.quick-select-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.team-chips-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.team-select-chip {
+  padding: 5px 11px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.team-select-chip:hover {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+/* Dashboard Header Rank Badge */
+.dashboard-header-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.banner-rank-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 10px 18px;
+  border-radius: 12px;
+  color: #ffffff;
+}
+
+.badge-kicker {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+
+.badge-rank-num {
+  font-family: 'DM Mono', monospace;
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #fbbf24;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.badge-total-teams {
+  font-size: 0.74rem;
+  opacity: 0.9;
+}
+
+/* Captain Info Pill */
+.captain-info-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  margin: 10px 0 14px;
+}
+
+.captain-info-pill strong {
+  color: #ffffff;
+}
+
+/* Teammates Card & Roster List */
+.teammates-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.team-members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.member-row-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: border-color 0.15s ease;
+}
+
+.member-row-item:hover {
+  border-color: #cbd5e1;
+}
+
+.member-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #e0e7ff;
+  color: #3730a3;
+  flex-shrink: 0;
+}
+
+.member-avatar .gold-icon {
+  color: #d97706;
+}
+
+.member-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.member-name-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.member-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.member-role-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.member-role-badge.captain {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.member-role-badge.teammate {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.member-reg-no {
+  font-size: 0.76rem;
+  color: #64748b;
+  font-family: 'DM Mono', monospace;
+}
+
+/* Add Teammate Box */
+.add-teammate-box {
+  margin-top: 8px;
+  padding: 18px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.add-teammate-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #166534;
+}
+
+.add-teammate-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #15803d;
+  line-height: 1.4;
+}
+
+.teammate-feedback-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.teammate-feedback-alert.success {
+  background: #dcfce7;
+  color: #14532d;
+  border: 1px solid #86efac;
+}
+
+.teammate-feedback-alert.error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+
+.add-teammate-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.teammate-inputs-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.input-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.input-wrap label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.input-wrap input {
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 0.84rem;
+}
+
+.add-teammate-submit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 800;
+  box-shadow: 0 4px 10px rgba(22, 163, 74, 0.25);
+  transition: all 0.15s ease;
+}
+
+.add-teammate-submit-btn:hover {
+  background: #15803d;
+  transform: translateY(-1px);
+}
+
+/* Leaderboard enhancements */
+.member-count-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #475569;
+  font-weight: 600;
+}
+
+.active-my-team-row {
+  background: #eff6ff !important;
+}
+
+.my-team-inline-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.rank-pill.rank-gold {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  font-weight: 800;
+}
+
+@media (max-width: 768px) {
+  .teammate-inputs-row {
+    grid-template-columns: 1fr;
+  }
+  .banner-rank-badge {
+    align-items: flex-start;
+    width: 100%;
   }
 }
 

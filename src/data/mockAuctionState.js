@@ -16,13 +16,102 @@ export const mockAuctionRounds = {
 };
 
 export const initialTeamsData = [
-  { id: 'team-1', name: 'Theorem Titans', number: 12, coins: 50000, numbers: [3, 7, 12, 19], rank: 4 },
-  { id: 'team-2', name: 'Prime Pioneers', number: 4, coins: 45000, numbers: [2, 11, 23], rank: 8 },
-  { id: 'team-3', name: 'Vector Vanguards', number: 17, coins: 38000, numbers: [5, 29], rank: 12 },
-  { id: 'team-4', name: 'Integral Innovators', number: 9, coins: 52000, numbers: [8, 14, 33, 44], rank: 2 },
-  { id: 'team-5', name: 'Matrix Mavericks', number: 15, coins: 41000, numbers: [18, 25, 49], rank: 9 },
-  { id: 'team-6', name: 'Limit Legends', number: 22, coins: 49500, numbers: [1, 30], rank: 6 }
+  {
+    id: 'team-1',
+    name: 'Theorem Titans',
+    number: 12,
+    coins: 50000,
+    numbers: [3, 7, 12, 19],
+    rank: 4,
+    captain: { name: 'Aarav Sharma', regNo: '22BCE1024' },
+    members: [
+      { name: 'Aarav Sharma', regNo: '22BCE1024', role: 'Captain', addedAt: 'Initial' },
+      { name: 'Riya Gupta', regNo: '22BCE1089', role: 'Teammate', addedAt: 'Round 1' },
+      { name: 'Kavya Nair', regNo: '22BSE0312', role: 'Teammate', addedAt: 'Round 1' },
+    ],
+  },
+  {
+    id: 'team-2',
+    name: 'Prime Pioneers',
+    number: 4,
+    coins: 45000,
+    numbers: [2, 11, 23],
+    rank: 8,
+    captain: { name: 'Aditya Verma', regNo: '22BSE0452' },
+    members: [
+      { name: 'Aditya Verma', regNo: '22BSE0452', role: 'Captain', addedAt: 'Initial' },
+      { name: 'Sneha Patel', regNo: '22BCE1140', role: 'Teammate', addedAt: 'Round 1' },
+    ],
+  },
+  {
+    id: 'team-3',
+    name: 'Vector Vanguards',
+    number: 17,
+    coins: 38000,
+    numbers: [5, 29],
+    rank: 12,
+    captain: { name: 'Rohan Mehta', regNo: '23BIT0128' },
+    members: [
+      { name: 'Rohan Mehta', regNo: '23BIT0128', role: 'Captain', addedAt: 'Initial' },
+    ],
+  },
+  {
+    id: 'team-4',
+    name: 'Integral Innovators',
+    number: 9,
+    coins: 52000,
+    numbers: [8, 14, 33, 44],
+    rank: 2,
+    captain: { name: 'Ananya Rao', regNo: '22BCE2050' },
+    members: [
+      { name: 'Ananya Rao', regNo: '22BCE2050', role: 'Captain', addedAt: 'Initial' },
+      { name: 'Devansh Joshi', regNo: '22BCE2091', role: 'Teammate', addedAt: 'Round 1' },
+    ],
+  },
+  {
+    id: 'team-5',
+    name: 'Matrix Mavericks',
+    number: 15,
+    coins: 41000,
+    numbers: [18, 25, 49],
+    rank: 9,
+    captain: { name: 'Vikram Singh', regNo: '21BCE0411' },
+    members: [
+      { name: 'Vikram Singh', regNo: '21BCE0411', role: 'Captain', addedAt: 'Initial' },
+    ],
+  },
+  {
+    id: 'team-6',
+    name: 'Limit Legends',
+    number: 22,
+    coins: 49500,
+    numbers: [1, 30],
+    rank: 6,
+    captain: { name: 'Priya Iyer', regNo: '22BIT0095' },
+    members: [
+      { name: 'Priya Iyer', regNo: '22BIT0095', role: 'Captain', addedAt: 'Initial' },
+    ],
+  },
 ];
+
+// Pre-registered Student Directory for registration verification simulation
+export const mockStudentDirectory = {
+  '22BCE1024': 'Aarav Sharma',
+  '22BCE1089': 'Riya Gupta',
+  '22BSE0312': 'Kavya Nair',
+  '22BSE0452': 'Aditya Verma',
+  '22BCE1140': 'Sneha Patel',
+  '23BIT0128': 'Rohan Mehta',
+  '22BCE2050': 'Ananya Rao',
+  '22BCE2091': 'Devansh Joshi',
+  '21BCE0411': 'Vikram Singh',
+  '22BIT0095': 'Priya Iyer',
+  '22BCE1580': 'Siddharth Roy',
+  '22BSE0845': 'Neha Kulkarni',
+  '23BCE0294': 'Arjun Reddy',
+  '23BSE0119': 'Diya Sen',
+  '22BIT0412': 'Karan Agarwal',
+};
 
 export const mockMilestones = [
   { id: 'm1', name: 'Round 1 Passed', status: 'passed' },

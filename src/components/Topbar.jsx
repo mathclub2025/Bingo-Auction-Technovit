@@ -42,20 +42,6 @@ export default function Topbar({
         >
           Dashboard
         </button>
-        <button
-          className={`topbar-tab ${currentView === 'user-auction' ? 'active' : ''}`}
-          onClick={() => onViewChange('user-auction')}
-          type="button"
-        >
-          Current Auction
-        </button>
-        <button
-          className={`topbar-tab ${currentView === 'user-progress' ? 'active' : ''}`}
-          onClick={() => onViewChange('user-progress')}
-          type="button"
-        >
-          Team Progress
-        </button>
       </nav>
 
       <div className="topbar-right-area">

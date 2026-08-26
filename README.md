@@ -1,94 +1,65 @@
 # Math Club Auction — User Frontend
 
-A React + Vite frontend for participants in the **Math Club Auction**.
+A modern React + Vite frontend for the **Math Club Auction**.
 
-The application allows teams to enter their team name, view their live dashboard, participate in mathematical qualification bids, track collected numbers (1–50 grid), and monitor competing teams.
+The User-End application allows participants to enter their team, view their team's auction status, monitor other teams, participate in the live auction interface, and track their collected numbers.
 
----
-
-## ✨ Actual Features Implemented
-
-### 🏠 Landing Page
-- Math Club Auction branding and tagline ("Solve. Bid. Dominate.")
-- Overview of starting budget (50,000 Coins), qualification challenges, and number collection
-- Entry button routing to team entry
-
-### 🔐 Team Login / Entry
-- Team name text input with validation (non-empty, min 2 characters)
-- Automatic lookup of existing teams or registration of new teams
-- Persistent team session using `localStorage`
-
-### 📊 User Dashboard
-- **My Team**: Prominent view of team name, team number, 50,000 Coins balance, collected numbers chips, and quick auction CTA
-- **Other Teams**: Read-only table of competing teams (rank, name, coin balance, collected numbers)
-
-### ⚡ Live Auction
-- Live item card with qualification math challenge problem
-- Bid counter controls in 1,000 Coin steps
-- Instant validation states: Correct Answer, Incorrect Answer (1,000 Coins penalty), Insufficient Coins, Waiting, and Completed
-
-### 🔢 Team Progress
-- 1–50 number collection grid with owned vs unowned cell highlights
-- Tournament milestones status
-- Coin transaction history ledger
-
-### 🧭 Navigation & Collapsible Sidebar
-- Topbar with hamburger menu toggle button (`☰` / `✕`)
-- Smooth sliding drawer sidebar (closed by default)
-- Mobile overlay backdrop and Escape key shortcut to close
-- Team switching / logout option
+> **Note:** This repository contains only the User-End frontend. The Admin-End frontend is maintained separately.
 
 ---
+
+## 📌 Project Overview
+
+Math Club Auction is an interactive mathematical auction system where participating teams start with a fixed number of coins and compete to collect numbers through mathematical challenges and auctions.
+
+The User-End application provides participants with a simple interface to:
+
+- Enter their team
+- View their team's current status
+- Monitor competing teams
+- Participate in the live auction
+- Track collected numbers
+- View coin transaction history
+- Navigate between different sections of the auction portal
+
+---
+## 📄 Pages
+
+### Landing Page
+...
+
+### Team Login
+...
+
+### User Dashboard
+...
+
+### Live Auction
+...
+
+### Team Progress
+...
 
 ## 🛠️ Tech Stack
 
-- **React 19**
-- **Vite 7**
-- **Vanilla CSS**
+- **React**
+- **Vite**
 - **JavaScript (JSX)**
+- **CSS**
+- **HTML**
+- **Git**
+- **GitHub**
 
 ---
 
 ## 📁 Project Structure
+Important folders:
 
-```text
-user/
+math-club-auction-user/
+├── src/
+│   ├── components/
+│   ├── data/
+│   └── pages/
 ├── index.html
 ├── package.json
-├── package-lock.json
-│
-└── src/
-    ├── App.jsx
-    ├── main.jsx
-    ├── styles.css
-    ├── components/
-    │   ├── Icon.jsx
-    │   ├── Sidebar.jsx
-    │   └── Topbar.jsx
-    ├── data/
-    │   └── mockAuctionState.js
-    └── pages/
-        ├── LandingPage.jsx
-        ├── TeamLogin.jsx
-        ├── UserDashboard.jsx
-        ├── Auction.jsx
-        └── TeamProgress.jsx
-```
-
----
-
-## 🚀 How to Run
-
-1. Open terminal in `math-club-auction/user`
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start development server:
-   ```bash
-   npm run dev
-   ```
-4. Build for production:
-   ```bash
-   npm run build
-   ```
+└── README.md
