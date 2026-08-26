@@ -68,17 +68,7 @@ CREATE TABLE public.score_audit_logs (
 );
 
 -- ============================================================================
--- 6. DEFAULT ADMIN SEED (Password: admin123)
--- ============================================================================
-INSERT INTO public.admin_users (username, password_hash, display_name)
-VALUES (
-    'admin',
-    '$2a$10$LagFvGfrriVwLM8UpOxcsemePPL4pAu0vLyZDbUEhHPGVGBUv0Jby', -- 'admin123'
-    'Admin Host'
-) ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash;
-
--- ============================================================================
--- 7. DISABLE RLS (Security Enforced via Node.js API Middleware)
+-- 6. DISABLE RLS (Security Enforced via Node.js API Middleware)
 -- ============================================================================
 ALTER TABLE public.admin_users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teams DISABLE ROW LEVEL SECURITY;
