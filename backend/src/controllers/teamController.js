@@ -5,7 +5,8 @@ import {
   updateTeamData,
   insertScoreAuditLog,
   getScoreAuditLogs,
-  resetAllTeamsToInitial
+  resetAllTeamsToInitial,
+  addMemberToTeam
 } from '../services/teamStore.js';
 import { broadcastTeamUpdate, broadcastAllTeams, broadcastAlert } from '../services/socketService.js';
 
@@ -20,6 +21,38 @@ export async function getTeams(req, res) {
     return res.json({
       success: true,
       teams: teams
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+/**
+ * POST /api/teams/:id/members
+ * Add a new teammate to team_members in Supabase
+ */
+export async function addTeamMember(req, res) {
+  try {
+    const { id } = req.params;
+    const { name, regNo, role = 'Teammate' } = req.body;
+
+    if (!name || !regNo) {
+      return res.status(400).json({ error: 'Teammate name and registration number are required.' });
+    }
+
+    const result = await addMemberToTeam({ teamId: id, name, regNo, role });
+    if (!result.success) {
+      return res.status(400).json({ error: result.error || 'Failed to add teammate to team.' });
+    }
+
+    const allTeams = await getAllTeamsList();
+    broadcastAllTeams(allTeams);
+
+    return res.status(201).json({
+      success: true,
+      message: `Added ${name} (${regNo}) to team!`,
+      member: result.member,
+      allTeams
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -84,8 +117,8 @@ export async function updateTeamPoints(req, res) {
 
     // Normalize answer status
     const isYes = isQuestionAnswered === true ||
-                  isQuestionAnswered === 'yes' ||
-                  answerStatus === 'yes';
+      isQuestionAnswered === 'yes' ||
+      answerStatus === 'yes';
 
     const bonus = isYes ? Math.max(0, Number(bonusCoins || bonusAdded) || 0) : 0;
     const targetNumber = isYes ? (numberObtained !== null ? numberObtained : numberWon) : null;
