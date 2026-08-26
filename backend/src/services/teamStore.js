@@ -5,21 +5,6 @@ import { supabase, isSupabaseConfigured } from '../config/supabase.js';
 const fallbackTeams = new Map();
 const fallbackAuditLogs = [];
 
-// Seed default admin in fallback store
-(async () => {
-  const adminHash = await bcrypt.hash('admin123', 10);
-  fallbackTeams.set('00000000-0000-0000-0000-000000000001', {
-    id: '00000000-0000-0000-0000-000000000001',
-    team_name: 'Admin Host',
-    password_hash: adminHash,
-    role: 'admin',
-    coins: 0,
-    numbers_collected: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  });
-})();
-
 /**
  * Find team by name (case-insensitive)
  */
@@ -114,17 +99,51 @@ export async function createTeam({ teamName, passwordHash, role = 'team' }) {
 }
 
 /**
- * Get all teams ordered by coins descending
+ * Get all teams ordered by coins descending with their team members
  */
 export async function getAllTeamsList() {
   if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase
         .from('teams')
-        .select('id, team_name, captain_name, captain_reg_no, coins, numbers_collected, created_at, updated_at')
+        .select(`
+          id,
+          team_name,
+          captain_name,
+          captain_reg_no,
+          coins,
+          numbers_collected,
+          created_at,
+          updated_at,
+          team_members (
+            id,
+            name,
+            reg_no,
+            role,
+            added_at
+          )
+        `)
         .order('coins', { ascending: false });
+
       if (!error && data) {
-        return data;
+        return data.map(t => {
+          let members = Array.isArray(t.team_members) ? t.team_members : [];
+          if (members.length === 0 && t.captain_name) {
+            members = [
+              {
+                id: 'capt-' + t.id,
+                name: t.captain_name,
+                reg_no: t.captain_reg_no || 'N/A',
+                role: 'Captain',
+                added_at: t.created_at
+              }
+            ];
+          }
+          return {
+            ...t,
+            members
+          };
+        });
       }
       if (error) {
         console.warn('[Store] Supabase fetch error:', error.message);
@@ -141,10 +160,116 @@ export async function getAllTeamsList() {
     coins: t.coins,
     numbers_collected: t.numbers_collected || [],
     created_at: t.created_at,
-    updated_at: t.updated_at
+    updated_at: t.updated_at,
+    members: t.members || []
   }));
 
   return list.sort((a, b) => (b.coins || 0) - (a.coins || 0));
+}
+
+/**
+ * Add a teammate into team_members table in Supabase
+ */
+export async function addMemberToTeam({ teamId, name, regNo, role = 'Teammate' }) {
+  const trimmedName = (name || '').trim();
+  const trimmedReg = (regNo || '').replace(/\s+/g, '').toUpperCase();
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      // 1. Check if reg_no is already registered as a Captain of ANY team in teams table
+      const { data: existingCaptain } = await supabase
+        .from('teams')
+        .select('id, team_name, captain_name, captain_reg_no')
+        .ilike('captain_reg_no', trimmedReg)
+        .maybeSingle();
+
+      if (existingCaptain) {
+        if (existingCaptain.id === teamId) {
+          return {
+            success: false,
+            error: `Registration number "${trimmedReg}" is already registered as the Captain of this team (${existingCaptain.team_name}).`
+          };
+        } else {
+          return {
+            success: false,
+            error: `Registration number "${trimmedReg}" is already registered as the Captain of team "${existingCaptain.team_name}". Each participant can belong to only one team.`
+          };
+        }
+      }
+
+      // 2. Check if reg_no is already registered in team_members table (any team)
+      const { data: existingReg } = await supabase
+        .from('team_members')
+        .select('id, name, reg_no, role, team_id, teams(team_name)')
+        .ilike('reg_no', trimmedReg)
+        .maybeSingle();
+
+      if (existingReg) {
+        const teamName = existingReg.teams?.team_name || 'another team';
+        if (existingReg.team_id === teamId) {
+          return {
+            success: false,
+            error: `Student with Registration Number "${trimmedReg}" (${existingReg.name}) is already added to your team roster.`
+          };
+        } else {
+          return {
+            success: false,
+            error: `Registration number "${trimmedReg}" is already registered in team "${teamName}" under member "${existingReg.name}" (${existingReg.role || 'Teammate'}). Each participant can belong to only one team.`
+          };
+        }
+      }
+
+      // 3. Insert into Supabase team_members table
+      const { data, error } = await supabase
+        .from('team_members')
+        .insert({
+          team_id: teamId,
+          name: trimmedName,
+          reg_no: trimmedReg,
+          role: role
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        return { success: true, member: data };
+      }
+      if (error) {
+        console.error('⚠️ Supabase insert member error:', error.message);
+        return { success: false, error: error.message };
+      }
+    } catch (e) {
+      console.error('⚠️ Supabase insert member exception:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  // Fallback in-memory validation
+  for (const t of fallbackTeams.values()) {
+    if (t.members && t.members.some(m => (m.reg_no || m.regNo || '').toUpperCase() === trimmedReg)) {
+      return {
+        success: false,
+        error: `Registration number "${trimmedReg}" is already registered under team "${t.team_name}". Each participant can belong to only one team.`
+      };
+    }
+  }
+
+  const mem = {
+    id: 'mem-' + Date.now(),
+    team_id: teamId,
+    name: trimmedName,
+    reg_no: trimmedReg,
+    role,
+    added_at: new Date().toISOString()
+  };
+
+  const target = fallbackTeams.get(teamId);
+  if (target) {
+    if (!target.members) target.members = [];
+    target.members.push(mem);
+  }
+
+  return { success: true, member: mem };
 }
 
 /**
