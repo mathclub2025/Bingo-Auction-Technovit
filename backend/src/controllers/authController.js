@@ -8,89 +8,114 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_bingo_math_club_key_2
 // In-memory fallback store when Supabase tables/keys are not active
 const memoryTeams = new Map();
 
-// Pre-seed default Admin if needed
-const DEFAULT_ADMIN_NAME = 'Admin';
-const DEFAULT_ADMIN_PASS = 'admin123';
-
-async function initDefaultMemoryAdmin() {
-  const hash = await bcrypt.hash(DEFAULT_ADMIN_PASS, 10);
-  memoryTeams.set('admin-default-id', {
-    id: 'admin-default-id',
-    team_name: DEFAULT_ADMIN_NAME,
-    password_hash: hash,
-    role: 'admin',
-    coins: 0,
-    numbers_collected: [],
-    created_at: new Date().toISOString()
-  });
-}
-initDefaultMemoryAdmin();
-
 /**
- * Register a new team or admin
+ * Register a new team (No seed data, uses live participant details)
+ * Inputs: { teamName, captainName, captainRegNo }
  */
 export async function signUp(req, res) {
   try {
     const {
       teamName: rawTeamName,
       username,
-      password = 'team123',
       captainName,
-      captainRegNo,
-      role = 'team'
+      captainRegNo
     } = req.body;
 
-    const teamName = (rawTeamName || username || '').trim();
+    const cleanTeamName = (rawTeamName || username || '').trim().replace(/\s+/g, ' ');
 
-    if (!teamName) {
+    if (!cleanTeamName) {
       return res.status(400).json({ error: 'Team name is required.' });
     }
 
-    const trimmedTeamName = teamName;
-    const dbRole = role === 'admin' ? 'admin' : 'team';
-    const initialCoins = dbRole === 'team' ? 50000 : 0;
+    const trimmedTeamName = cleanTeamName;
+    const initialCoins = 50000;
     const initialNumbers = [];
-
-    const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(password || 'team123', saltRounds);
 
     let newTeam = null;
 
     if (isSupabaseConfigured) {
-      // Check if team name exists in Supabase
-      const { data: existingTeam } = await supabase
+      // 1. Strict Team Name Uniqueness Check (Case & Whitespace Insensitive)
+      const { data: allExistingTeams } = await supabase
         .from('teams')
-        .select('id, team_name')
-        .ilike('team_name', trimmedTeamName)
-        .maybeSingle();
+        .select('id, team_name');
 
-      if (existingTeam) {
-        return res.status(400).json({ error: `Team name "${trimmedTeamName}" is already registered.` });
+      if (allExistingTeams) {
+        const normalizedTarget = trimmedTeamName.replace(/\s+/g, '').toLowerCase();
+        const duplicate = allExistingTeams.find(
+          (t) => (t.team_name || '').replace(/\s+/g, '').toLowerCase() === normalizedTarget
+        );
+        if (duplicate) {
+          return res.status(400).json({
+            error: `Team name "${trimmedTeamName}" is already registered (as "${duplicate.team_name}"). Please choose a unique team name.`
+          });
+        }
       }
 
-      // Insert into Supabase
+      // 2. Strict Captain Reg No Uniqueness Check across the entire system
+      const cleanCaptainReg = (captainRegNo || '').replace(/\s+/g, '').toUpperCase();
+      if (cleanCaptainReg) {
+        // Check if reg_no exists in teams table as captain
+        const { data: existingCaptain } = await supabase
+          .from('teams')
+          .select('id, team_name, captain_name, captain_reg_no')
+          .ilike('captain_reg_no', cleanCaptainReg)
+          .maybeSingle();
+
+        if (existingCaptain) {
+          return res.status(400).json({
+            error: `Registration number "${cleanCaptainReg}" is already registered as Captain of team "${existingCaptain.team_name}". Each participant can belong to only one team.`
+          });
+        }
+
+        // Check if reg_no exists in team_members table
+        const { data: existingMember } = await supabase
+          .from('team_members')
+          .select('id, reg_no, name, role, teams(team_name)')
+          .ilike('reg_no', cleanCaptainReg)
+          .maybeSingle();
+
+        if (existingMember) {
+          const registeredTeam = existingMember.teams?.team_name || 'another team';
+          return res.status(400).json({
+            error: `Registration number "${cleanCaptainReg}" is already registered under "${existingMember.name}" (${existingMember.role || 'Member'}) in team "${registeredTeam}". Each participant can belong to only one team.`
+          });
+        }
+      }
+
+      // Insert team into Supabase teams table
       const { data, error } = await supabase
         .from('teams')
         .insert({
           team_name: trimmedTeamName,
-          password_hash: passwordHash,
-          role: dbRole,
+          captain_name: (captainName || '').trim() || (trimmedTeamName + ' Captain'),
+          captain_reg_no: (captainRegNo || '').trim() || 'REG_N/A',
           coins: initialCoins,
           numbers_collected: initialNumbers
         })
-        .select('id, team_name, role, coins, numbers_collected, created_at')
+        .select()
         .single();
 
       if (error) {
-        console.warn('⚠️ Supabase insert failed, falling back to memory store:', error.message);
+        console.error('⚠️ Supabase team insert failed:', error.message);
+        return res.status(500).json({ error: 'Failed to create team in database: ' + error.message });
       } else {
         newTeam = data;
+        // Insert captain into team_members table
+        if (captainName && captainRegNo) {
+          try {
+            await supabase.from('team_members').insert({
+              team_id: data.id,
+              name: captainName.trim(),
+              reg_no: captainRegNo.trim(),
+              role: 'Captain'
+            });
+          } catch (e) {
+            console.warn('Could not insert captain into team_members:', e.message);
+          }
+        }
       }
-    }
-
-    // Fallback if Supabase was not used or failed
-    if (!newTeam) {
-      // Check memory store for duplicate
+    } else {
+      // Memory fallback if DB is completely unconfigured
       for (const t of memoryTeams.values()) {
         if (t.team_name.toLowerCase() === trimmedTeamName.toLowerCase()) {
           return res.status(400).json({ error: `Team name "${trimmedTeamName}" is already registered.` });
@@ -101,8 +126,8 @@ export async function signUp(req, res) {
       newTeam = {
         id,
         team_name: trimmedTeamName,
-        password_hash: passwordHash,
-        role: dbRole,
+        captain_name: captainName || '',
+        captain_reg_no: captainRegNo || '',
         coins: initialCoins,
         numbers_collected: initialNumbers,
         created_at: new Date().toISOString()
@@ -112,7 +137,7 @@ export async function signUp(req, res) {
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: newTeam.id, teamName: newTeam.team_name, role: newTeam.role },
+      { id: newTeam.id, teamName: newTeam.team_name, role: 'team' },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -121,15 +146,10 @@ export async function signUp(req, res) {
     const allTeams = await getAllTeamsList();
     broadcastTeamsUpdate(allTeams, newTeam);
 
-    const { password_hash, ...safeTeam } = newTeam;
     return res.status(201).json({
       message: 'Registration successful',
       token,
-      team: {
-        ...safeTeam,
-        captain_name: captainName || '',
-        captain_reg_no: captainRegNo || ''
-      }
+      team: newTeam
     });
   } catch (err) {
     console.error('Sign up error:', err);
@@ -138,7 +158,7 @@ export async function signUp(req, res) {
 }
 
 /**
- * Sign in using teamName / username and password
+ * Sign in using teamName / username (Passwordless for Teams, Password-checked for Admin in DB)
  */
 export async function signIn(req, res) {
   try {
@@ -151,28 +171,54 @@ export async function signIn(req, res) {
 
     const trimmedIdentifier = rawIdentifier;
 
-    // Special check for Admin Host login
-    if (trimmedIdentifier.toLowerCase() === 'admin') {
-      if (password === DEFAULT_ADMIN_PASS || password === (process.env.ADMIN_KEY || 'admin123')) {
-        const token = jwt.sign(
-          { id: 'admin-master', teamName: 'Source Computer Admin', role: 'admin' },
-          JWT_SECRET,
-          { expiresIn: '24h' }
-        );
-        return res.json({
-          message: 'Admin sign in successful',
-          token,
-          team: {
-            id: 'admin-master',
-            team_name: 'Source Computer Admin',
-            role: 'admin',
-            coins: 0,
-            numbers_collected: []
-          }
-        });
+    if (isSupabaseConfigured) {
+      // 1. Check admin_users table in Supabase (Strictly authenticated via SQL-created admin records)
+      const { data: adminUser, error: adminErr } = await supabase
+        .from('admin_users')
+        .select('*')
+        .ilike('username', trimmedIdentifier)
+        .maybeSingle();
+
+      if (!adminErr && adminUser) {
+        if (!password) {
+          return res.status(400).json({ error: 'Admin password is required.' });
+        }
+
+        let isPassValid = false;
+        try {
+          isPassValid = await bcrypt.compare(password, adminUser.password_hash);
+        } catch (e) {}
+        // Also allow plain text match if inserted directly via SQL
+        if (!isPassValid && password === adminUser.password_hash) {
+          isPassValid = true;
+        }
+
+        if (isPassValid) {
+          const token = jwt.sign(
+            { id: adminUser.id, username: adminUser.username, role: 'admin' },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+          );
+          return res.json({
+            message: 'Admin sign in successful',
+            token,
+            team: {
+              id: adminUser.id,
+              username: adminUser.username,
+              team_name: adminUser.username,
+              display_name: adminUser.username,
+              role: 'admin',
+              coins: 0,
+              numbers_collected: []
+            }
+          });
+        } else {
+          return res.status(401).json({ error: 'Invalid admin password.' });
+        }
       }
     }
 
+    // 2. Check teams table (Passwordless team entry for live registered teams)
     let team = null;
 
     if (isSupabaseConfigured) {
@@ -184,11 +230,15 @@ export async function signIn(req, res) {
 
       if (!error && data) {
         team = data;
+      } else {
+        // Fallback: match by normalized stripped whitespace & lowercase
+        const { data: allTeams } = await supabase.from('teams').select('*');
+        if (allTeams) {
+          const target = trimmedIdentifier.replace(/\s+/g, '').toLowerCase();
+          team = allTeams.find((t) => (t.team_name || '').replace(/\s+/g, '').toLowerCase() === target) || null;
+        }
       }
-    }
-
-    // Fallback check memory store
-    if (!team) {
+    } else {
       for (const t of memoryTeams.values()) {
         if (t.team_name.toLowerCase() === trimmedIdentifier.toLowerCase()) {
           team = t;
@@ -198,28 +248,26 @@ export async function signIn(req, res) {
     }
 
     if (!team) {
-      return res.status(401).json({ error: 'Invalid credentials. Team or user not found.' });
-    }
-
-    // If password was provided, verify it
-    if (password && team.password_hash) {
-      const isPasswordValid = await bcrypt.compare(password, team.password_hash);
-      if (!isPasswordValid && password !== DEFAULT_ADMIN_PASS) {
-        return res.status(401).json({ error: 'Invalid password.' });
-      }
+      return res.status(401).json({ error: `Team "${trimmedIdentifier}" not found. Please register first.` });
     }
 
     const token = jwt.sign(
-      { id: team.id, teamName: team.team_name, role: team.role || 'team' },
+      { id: team.id, teamName: team.team_name, role: 'team' },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    const { password_hash, ...safeTeam } = team;
     return res.json({
       message: 'Sign in successful',
       token,
-      team: safeTeam
+      team: {
+        id: team.id,
+        team_name: team.team_name,
+        coins: team.coins ?? 50000,
+        numbers_collected: team.numbers_collected || [],
+        captain_name: team.captain_name || '',
+        captain_reg_no: team.captain_reg_no || ''
+      }
     });
   } catch (err) {
     console.error('Sign in error:', err);
@@ -240,13 +288,29 @@ export async function getProfile(req, res) {
 
     let team = null;
     if (isSupabaseConfigured) {
-      const { data } = await supabase
-        .from('teams')
-        .select('id, team_name, role, coins, numbers_collected, created_at')
-        .eq('id', decoded.id)
-        .maybeSingle();
-
-      if (data) team = data;
+      if (decoded.role === 'admin') {
+        const { data } = await supabase
+          .from('admin_users')
+          .select('id, username, display_name, created_at')
+          .eq('id', decoded.id)
+          .maybeSingle();
+        if (data) {
+          team = {
+            id: data.id,
+            team_name: data.display_name || data.username,
+            role: 'admin',
+            coins: 0,
+            numbers_collected: []
+          };
+        }
+      } else {
+        const { data } = await supabase
+          .from('teams')
+          .select('id, team_name, captain_name, captain_reg_no, coins, numbers_collected, created_at')
+          .eq('id', decoded.id)
+          .maybeSingle();
+        if (data) team = data;
+      }
     }
 
     if (!team && memoryTeams.has(decoded.id)) {
@@ -254,7 +318,7 @@ export async function getProfile(req, res) {
       team = safe;
     }
 
-    if (!team) return res.status(404).json({ error: 'Team not found' });
+    if (!team) return res.status(404).json({ error: 'Account not found' });
     return res.json({ team });
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
@@ -341,26 +405,30 @@ export async function updateTeamPoints(req, res) {
         .from('teams')
         .update({
           coins: newCoins,
-          numbers_collected: currentNumbers
+          numbers_collected: currentNumbers,
+          updated_at: new Date().toISOString()
         })
         .eq('id', teamId)
-        .select('id, team_name, captain_name, captain_reg_no, coins, numbers_collected, created_at')
+        .select('id, team_name, captain_name, captain_reg_no, coins, numbers_collected, created_at, updated_at')
         .single();
 
       if (!error && data) {
         updatedTeam = data;
       }
-    }
 
-    // Fallback or sync memory store
-    if (memoryTeams.has(teamId)) {
-      const memItem = memoryTeams.get(teamId);
-      memItem.coins = newCoins;
-      memItem.numbers_collected = currentNumbers;
-      memoryTeams.set(teamId, memItem);
-      if (!updatedTeam) {
-        const { password_hash, ...safe } = memItem;
-        updatedTeam = safe;
+      // Record score audit log
+      try {
+        await supabase.from('score_audit_logs').insert({
+          team_id: teamId,
+          coins_deducted: numDeducted,
+          bonus_added: numBonus,
+          number_won: questionAnswer === 'yes' && numberObtained !== null ? Number(numberObtained) : null,
+          answer_status: questionAnswer === 'yes' ? 'Correct' : 'Incorrect',
+          previous_coins: currentCoins,
+          new_coins: newCoins
+        });
+      } catch (auditErr) {
+        console.warn('Audit log notice:', auditErr.message);
       }
     }
 
@@ -368,13 +436,14 @@ export async function updateTeamPoints(req, res) {
       updatedTeam = {
         id: targetTeam.id,
         team_name: targetTeam.team_name,
-        role: targetTeam.role,
+        captain_name: targetTeam.captain_name || '',
+        captain_reg_no: targetTeam.captain_reg_no || '',
         coins: newCoins,
         numbers_collected: currentNumbers
       };
     }
 
-    // Realtime broadcast to all open dashboards
+    // Realtime broadcast to all open dashboards and participants
     const allTeams = await getAllTeamsList();
     broadcastTeamsUpdate(allTeams, updatedTeam);
 
@@ -390,7 +459,7 @@ export async function updateTeamPoints(req, res) {
 }
 
 /**
- * Helper to fetch list of all teams excluding passwords
+ * Helper to fetch list of all teams from Supabase
  */
 async function getAllTeamsList() {
   let teamsList = [];
@@ -405,14 +474,6 @@ async function getAllTeamsList() {
     }
   }
 
-  // Merge with memory store teams
-  for (const t of memoryTeams.values()) {
-    if (!teamsList.some(item => item.id === t.id)) {
-      const { password_hash, ...safe } = t;
-      teamsList.push(safe);
-    }
-  }
-
-  teamsList.sort((a, b) => b.coins - a.coins);
+  teamsList.sort((a, b) => (b.coins || 0) - (a.coins || 0));
   return teamsList;
 }
