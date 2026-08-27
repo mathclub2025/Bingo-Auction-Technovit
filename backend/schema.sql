@@ -29,7 +29,8 @@ CREATE TABLE public.teams (
     team_name TEXT UNIQUE NOT NULL,
     captain_name TEXT NOT NULL,
     captain_reg_no TEXT NOT NULL,
-    coins INT DEFAULT 50000 CHECK (coins >= 0),                 -- Starts with 50,000 coins
+    bingo_card_set INT DEFAULT 1 CHECK (bingo_card_set BETWEEN 1 AND 4), -- Set 1, 2, 3, or 4
+    coins INT DEFAULT 50000,                                    -- Starts with 50,000 coins, can go negative
     numbers_collected JSONB NOT NULL DEFAULT '[]'::jsonb,       -- Array of won numbers e.g. [7, 14]
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

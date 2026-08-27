@@ -2,23 +2,26 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { initialTeams } from '../data/mockTeams';
 import Icon from '../components/Icon';
-import { loginAdmin, getAdminToken, removeAdminToken } from '../services/api';
+import { loginAdmin, getAdminToken, removeAdminToken, awardRoundBonus } from '../services/api';
+import { evaluateBingoCard } from '../data/bingoGrids';
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 function formatTeam(t) {
   return {
     id: t.id,
     name: t.team_name || t.name || 'Unnamed Team',
     coins: Number(t.coins) || 0,
-    numbers: Array.isArray(t.numbers_collected) ? t.numbers_collected : (Array.isArray(t.numbers) ? t.numbers : [])
+    numbers: Array.isArray(t.numbers_collected) ? t.numbers_collected : (Array.isArray(t.numbers) ? t.numbers : []),
+    bingo_card_set: t.bingo_card_set || t.bingoCardSet || 1,
+    requiredNumbers: t.requiredNumbers || []
   };
 }
 
 const formatCoins = (value) =>
   new Intl.NumberFormat('en-IN', {
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(value || 0);
 
 export default function AdminDashboard({ onSwitchToUserView }) {
   // Auth state
@@ -28,15 +31,44 @@ export default function AdminDashboard({ onSwitchToUserView }) {
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
+  // Socket
+  const [socket, setSocket] = useState(null);
+
   // Dashboard state
   const [teams, setTeams] = useState(initialTeams);
   const [selectedTeamId, setSelectedTeamId] = useState(initialTeams[0]?.id || '');
+  const [notice, setNotice] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // 1. Send Question Form State
+  const [sendTeamId, setSendTeamId] = useState('');
+  const [sendNumberBidded, setSendNumberBidded] = useState('');
+  const [initialBid, setInitialBid] = useState('500');
+  const [finalBid, setFinalBid] = useState('2000');
+  const [sendSuccess, setSendSuccess] = useState('');
+
+  // 2. Manual Update Form State (Handles all point deductions, bonuses, numbers & Level 5 settlements)
   const [deduction, setDeduction] = useState('');
   const [answer, setAnswer] = useState('no');
   const [bonus, setBonus] = useState('');
   const [number, setNumber] = useState('');
-  const [notice, setNotice] = useState(null);
-  const [loading, setLoading] = useState(false);
+
+  // Compute Delta for Send Question Tool
+  const calculatedDelta = useMemo(() => {
+    const init = Math.max(0, Number(initialBid) || 0);
+    const fin = Math.max(0, Number(finalBid) || 0);
+    return Math.max(0, fin - init);
+  }, [initialBid, finalBid]);
+
+  // Compute Eligible Levels preview
+  const eligibleLevelsPreview = useMemo(() => {
+    const delta = calculatedDelta;
+    if (delta <= 800) return [1, 2, 3, 4, 5];
+    if (delta <= 1900) return [2, 3, 4, 5];
+    if (delta <= 4000) return [3, 4, 5];
+    if (delta <= 9000) return [4, 5];
+    return [5];
+  }, [calculatedDelta]);
 
   // Fetch real team records from backend API
   const fetchTeamsFromBackend = async () => {
@@ -44,19 +76,21 @@ export default function AdminDashboard({ onSwitchToUserView }) {
       const res = await fetch(`${API_BASE_URL}/api/teams`);
       if (res.ok) {
         const data = await res.json();
-        if (data.teams && Array.isArray(data.teams) && data.teams.length > 0) {
-          const formatted = data.teams.map(formatTeam);
+        const rawTeams = Array.isArray(data) ? data : (data.teams || []);
+        if (Array.isArray(rawTeams) && rawTeams.length > 0) {
+          const formatted = rawTeams.map(formatTeam);
           setTeams(formatted);
           setSelectedTeamId((prevId) => {
             if (prevId && formatted.some((t) => String(t.id) === String(prevId))) {
               return prevId;
             }
-            return prevId || formatted[0].id;
+            return formatted[0].id;
           });
+          setSendTeamId((prev) => prev || formatted[0].id);
         }
       }
     } catch (err) {
-      console.warn('Backend server offline or unreachable, using local fallback:', err.message);
+      console.warn('Backend server offline or unreachable:', err.message);
     }
   };
 
@@ -64,29 +98,48 @@ export default function AdminDashboard({ onSwitchToUserView }) {
     if (isAuthenticated) {
       fetchTeamsFromBackend();
 
-      const socket = io('http://localhost:5000', {
+      const newSocket = io(API_BASE_URL, {
         transports: ['websocket', 'polling'],
       });
+      setSocket(newSocket);
 
-      socket.on('connect', () => {
-        socket.emit('join_dashboard', { role: 'admin' });
+      newSocket.on('connect', () => {
+        newSocket.emit('join_dashboard', { role: 'admin' });
       });
 
-      socket.on('teams:updated', (payload) => {
+      newSocket.on('teams:updated', (payload) => {
         if (payload && Array.isArray(payload.teams)) {
           const formatted = payload.teams.map(formatTeam);
           setTeams(formatted);
         }
       });
 
-      socket.on('team:updated', () => {
+      newSocket.on('teams:all', (payload) => {
+        if (payload && Array.isArray(payload.teams)) {
+          const formatted = payload.teams.map(formatTeam);
+          setTeams(formatted);
+        }
+      });
+
+      newSocket.on('team:updated', () => {
         fetchTeamsFromBackend();
       });
 
-      const interval = setInterval(fetchTeamsFromBackend, 2000);
+      // Notification when a team chooses Level 5 (pre-fills the manual score adjustment form)
+      newSocket.on('auction:admin_level_5_pending', (payload) => {
+        setSelectedTeamId(payload.teamId);
+        setDeduction(String(payload.finalBid || ''));
+        setNumber(String(payload.numberBidded || ''));
+        setAnswer('yes');
+        setBonus('5000');
+        setNotice({
+          type: 'success',
+          text: `${payload.teamName} selected Level 5 (Offline PPT). Manual score adjustment pre-filled below.`
+        });
+      });
+
       return () => {
-        clearInterval(interval);
-        socket.disconnect();
+        newSocket.disconnect();
       };
     }
   }, [isAuthenticated]);
@@ -96,34 +149,11 @@ export default function AdminDashboard({ onSwitchToUserView }) {
     [selectedTeamId, teams],
   );
 
-  const resetForm = () => {
-    setDeduction('');
-    setAnswer('no');
-    setBonus('');
-    setNumber('');
-  };
+  const selectedTeamBingo = useMemo(() => {
+    return evaluateBingoCard(selectedTeam.bingo_card_set || 1, selectedTeam.numbers || []);
+  }, [selectedTeam]);
 
-  // Auto-dismiss success/error notice banner after 30 seconds
-  useEffect(() => {
-    if (notice) {
-      const timer = setTimeout(() => {
-        setNotice(null);
-      }, 30000);
-      return () => clearTimeout(timer);
-    }
-  }, [notice]);
-
-  const selectTeam = (teamId) => {
-    setSelectedTeamId(String(teamId));
-    setNotice(null);
-    resetForm();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const [currentAdminUser, setCurrentAdminUser] = useState(() => {
-    return localStorage.getItem('admin_username') || 'admin';
-  });
-
+  // Handle Admin Login
   const handleAdminLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -135,7 +165,6 @@ export default function AdminDashboard({ onSwitchToUserView }) {
         password: adminPassword,
       });
       const name = res.team?.username || res.team?.team_name || adminUsername || 'admin';
-      setCurrentAdminUser(name);
       localStorage.setItem('admin_username', name);
       setIsAuthenticated(true);
       setAdminPassword('');
@@ -151,42 +180,70 @@ export default function AdminDashboard({ onSwitchToUserView }) {
     localStorage.removeItem('admin_username');
     setIsAuthenticated(false);
     setAuthError('');
-    setAdminPassword('');
   };
 
-  const submitUpdate = async (event) => {
-    event.preventDefault();
+  // 1. Send Question to Team Submit
+  const handleSendQuestionSubmit = (e) => {
+    e.preventDefault();
+    setSendSuccess('');
+
+    const targetId = sendTeamId || selectedTeamId || teams[0]?.id;
+    const targetTeam = teams.find((t) => String(t.id) === String(targetId));
+    if (!targetTeam) return;
+
+    const init = Math.max(0, Number(initialBid) || 0);
+    const fin = Math.max(0, Number(finalBid) || 0);
+    const numBidded = sendNumberBidded ? Number(sendNumberBidded) : null;
+
+    if (fin < init) {
+      setNotice({ type: 'error', text: 'Final bid must be greater than or equal to initial bid.' });
+      return;
+    }
+
+    if (socket) {
+      socket.emit('admin:send_question', {
+        teamId: targetTeam.id,
+        initialBid: init,
+        finalBid: fin,
+        numberBidded: numBidded
+      });
+    }
+
+    setSendSuccess(`Question choices (Levels ${eligibleLevelsPreview.join(', ')}) transmitted to ${targetTeam.name}.`);
+    setTimeout(() => setSendSuccess(''), 8000);
+  };
+
+  // 2. Award +250 Coins to All Teams (Round Bonus)
+  const handleAwardAllBonus = async () => {
+    try {
+      setLoading(true);
+      const res = await awardRoundBonus(250);
+      if (res && res.teams && Array.isArray(res.teams)) {
+        setTeams(res.teams.map(formatTeam));
+      }
+      setNotice({
+        type: 'success',
+        text: 'Successfully credited +250 coins to all registered teams.'
+      });
+    } catch (err) {
+      setNotice({ type: 'error', text: err.message || 'Failed to award round bonus' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 3. Manual Score Adjustment Submit (Handles Deductions, Level 5 Dares, and Bonuses)
+  const submitManualUpdate = async (e) => {
+    e.preventDefault();
     setNotice(null);
 
     const deductionAmount = Number(deduction);
     const bonusAmount = answer === 'yes' ? Number(bonus) : 0;
     const numberObtained = answer === 'yes' && number !== '' ? Number(number) : null;
 
-    if (!Number.isInteger(deductionAmount) || deductionAmount <= 0) {
-      setNotice({ type: 'error', text: 'Enter a valid coin deduction greater than 0.' });
+    if (!Number.isInteger(deductionAmount) || deductionAmount < 0) {
+      setNotice({ type: 'error', text: 'Enter a valid coin deduction amount.' });
       return;
-    }
-
-    if (deductionAmount > selectedTeam.coins) {
-      setNotice({ type: 'error', text: 'The deduction cannot exceed this team’s current coins.' });
-      return;
-    }
-
-    if (answer === 'yes') {
-      if (!Number.isInteger(bonusAmount) || bonusAmount < 0) {
-        setNotice({ type: 'error', text: 'Enter a valid bonus amount of 0 or more.' });
-        return;
-      }
-
-      if (numberObtained !== null && (!Number.isInteger(numberObtained) || numberObtained < 1 || numberObtained > 25)) {
-        setNotice({ type: 'error', text: 'Number obtained must be a whole number from 1 to 25.' });
-        return;
-      }
-
-      if (numberObtained !== null && selectedTeam.numbers.includes(numberObtained)) {
-        setNotice({ type: 'error', text: `Number ${numberObtained} is already recorded for this team.` });
-        return;
-      }
     }
 
     setLoading(true);
@@ -194,78 +251,48 @@ export default function AdminDashboard({ onSwitchToUserView }) {
     const targetTeamId = selectedTeam.id;
 
     try {
-      const token = getAdminToken();
-      const response = await fetch(`${API_BASE_URL}/api/auth/admin/update-team`, {
+      const response = await fetch(`${API_BASE_URL}/api/teams/admin/update`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           teamId: targetTeamId,
           teamName: targetTeamName,
           coinsDeducted: deductionAmount,
-          questionAnswer: answer,
+          isQuestionAnswered: answer === 'yes',
           bonusCoins: bonusAmount,
           numberObtained: numberObtained
         })
       });
 
       const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to update team record');
-      }
-
-      if (result.allTeams && Array.isArray(result.allTeams)) {
-        const formatted = result.allTeams.map(formatTeam);
-        setTeams(formatted);
-      } else {
-        await fetchTeamsFromBackend();
-      }
-
-      // Preserve selected team ID
-      setSelectedTeamId(targetTeamId);
+      if (!response.ok) throw new Error(result.error || 'Failed to update');
 
       setNotice({
         type: 'success',
         text: answer === 'yes'
-          ? `Updated ${targetTeamName}: number ${numberObtained ?? 'none'} recorded and balance adjusted.`
-          : `Updated ${targetTeamName}: ${formatCoins(deductionAmount)} coins deducted.`,
+          ? `Updated ${targetTeamName}: balance adjusted and number ${numberObtained ?? 'none'} recorded.`
+          : `Updated ${targetTeamName}: ₹${formatCoins(deductionAmount)} coins deducted.`
       });
-      resetForm();
-    } catch (err) {
-      // Fallback local update if API fails
-      const coinChange = bonusAmount - deductionAmount;
-      const updatedTeam = {
-        ...selectedTeam,
-        coins: selectedTeam.coins + coinChange,
-        numbers: numberObtained ? [...selectedTeam.numbers, numberObtained] : selectedTeam.numbers,
-      };
 
-      setTeams((currentTeams) =>
-        currentTeams.map((team) => (team.id === targetTeamId ? updatedTeam : team)),
-      );
-      setNotice({
-        type: 'success',
-        text: `Updated ${targetTeamName}: ${formatCoins(deductionAmount)} coins deducted.`
-      });
-      resetForm();
+      setDeduction('');
+      setAnswer('no');
+      setBonus('');
+      setNumber('');
+      await fetchTeamsFromBackend();
+    } catch (err) {
+      setNotice({ type: 'error', text: err.message });
     } finally {
       setLoading(false);
     }
   };
 
-  // IF NOT AUTHENTICATED: Show Admin Login Screen
+  // IF NOT AUTHENTICATED
   if (!isAuthenticated) {
     return (
       <div className="login-page-container">
         <div className="login-card-wrapper" style={{ maxWidth: '440px' }}>
           {onSwitchToUserView && (
-            <button
-              className="login-back-btn"
-              onClick={onSwitchToUserView}
-              type="button"
-            >
+            <button className="login-back-btn" onClick={onSwitchToUserView} type="button">
               <Icon name="arrow-left" size={14} />
               <span>Back to Portal</span>
             </button>
@@ -273,11 +300,11 @@ export default function AdminDashboard({ onSwitchToUserView }) {
 
           <article className="figma-card login-card">
             <div className="login-header">
-              <div className="brand-mark-login" style={{ background: '#173d7a' }}>
-                <Icon name="shield" size={24} />
+              <div className="brand-mark-login" style={{ background: 'transparent', boxShadow: 'none' }}>
+                <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '52px', height: '52px', objectFit: 'contain' }} />
               </div>
               <h2>Admin Control Desk</h2>
-              <p>Sign in with organizer credentials to access the live host control desk.</p>
+              <p>Bingo Auction Arena • Conducted by Mathematics Club VITCC for TechnoVIT.</p>
             </div>
 
             {authError && (
@@ -296,10 +323,7 @@ export default function AdminDashboard({ onSwitchToUserView }) {
                   id="admin-username-input"
                   type="text"
                   value={adminUsername}
-                  onChange={(e) => {
-                    setAdminUsername(e.target.value);
-                    if (authError) setAuthError('');
-                  }}
+                  onChange={(e) => setAdminUsername(e.target.value)}
                   autoFocus
                 />
               </div>
@@ -312,10 +336,7 @@ export default function AdminDashboard({ onSwitchToUserView }) {
                   id="admin-password-input"
                   type="password"
                   value={adminPassword}
-                  onChange={(e) => {
-                    setAdminPassword(e.target.value);
-                    if (authError) setAuthError('');
-                  }}
+                  onChange={(e) => setAdminPassword(e.target.value)}
                 />
               </div>
 
@@ -324,68 +345,77 @@ export default function AdminDashboard({ onSwitchToUserView }) {
                 <Icon name="check" size={16} />
               </button>
             </form>
-
-            <div className="login-info-box">
-              <div className="info-item">
-                <span className="info-label">Access Level:</span>
-                <strong className="info-value font-mono">Source Computer</strong>
-              </div>
-              <div className="info-item">
-                <span className="info-label">Privileges:</span>
-                <strong className="info-value">Deductions & Awards</strong>
-              </div>
-            </div>
           </article>
         </div>
       </div>
     );
   }
 
-  // IF AUTHENTICATED: Show Full Admin Control Desk
+  // IF AUTHENTICATED
   return (
     <main className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark"><Icon name="grid" size={19} /></div>
+          <div className="brand-mark" style={{ background: 'transparent', boxShadow: 'none' }}>
+            <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '42px', height: '42px', objectFit: 'contain' }} />
+          </div>
           <div>
-            <p className="eyebrow">VIT Chennai · Mathematics Club</p>
-            <h1>Math Club Auction · Admin Desk</h1>
+            <p className="eyebrow">Mathematics Club VITCC • TechnoVIT</p>
+            <h1>Bingo Auction Arena · Admin Control Desk</h1>
           </div>
         </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div className="admin-status" aria-label="Admin status">
-            <span className="status-dot" />
-            <span>Admin: <strong>{currentAdminUser}</strong></span>
-          </div>
+          {/* Quick 250 Bonus Coins Button */}
+          <button
+            type="button"
+            onClick={handleAwardAllBonus}
+            disabled={loading}
+            className="select-button"
+            style={{
+              background: '#047857',
+              color: '#ffffff',
+              borderColor: '#047857',
+              padding: '8px 16px',
+              fontWeight: 800,
+              fontSize: '0.78rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Icon name="gift" size={14} />
+            <span>+250 Coins (All Teams Round Bonus)</span>
+          </button>
+
           <button
             type="button"
             onClick={handleAdminLogout}
             className="select-button"
             style={{ padding: '8px 14px', fontSize: '0.78rem', color: '#a43c3c', borderColor: '#f9dddd', fontWeight: 700 }}
-            title="Sign out of Admin Control Desk"
           >
             Sign Out
           </button>
         </div>
       </header>
 
-      <section className="page-intro" aria-labelledby="dashboard-title">
-        <div>
-          <p className="section-kicker">Auction control desk</p>
-          <h2 id="dashboard-title">Team records</h2>
-          <p>Review standings and update one team at a time.</p>
+      {notice && (
+        <div className={`notice ${notice.type}`} style={{ margin: '16px 0' }} role="status">
+          <Icon name={notice.type === 'success' ? 'check' : 'alert'} size={18} />
+          <span>{notice.text}</span>
         </div>
-        <div className="secured-note"><Icon name="shield" size={17} /> Editing access enabled</div>
-      </section>
+      )}
 
-      <section className="dashboard-grid">
+      {/* SECTION 1: SELECTED TEAM SUMMARY & MANUAL SCORE ADJUSTMENT */}
+      <section className="dashboard-grid" style={{ marginTop: '24px' }}>
+        {/* SELECTED TEAM CARD */}
         <article className="team-summary card" aria-labelledby="selected-team-title">
           <div className="card-heading">
             <div>
               <p className="section-kicker">Selected team</p>
               <h2 id="selected-team-title">{selectedTeam.name}</h2>
             </div>
-            <span className="team-index">#{teams.findIndex((team) => team.id === selectedTeam.id) + 1}</span>
+            <span className="team-index">Set #{selectedTeam.bingo_card_set || 1}</span>
           </div>
 
           <div className="summary-metrics">
@@ -393,7 +423,9 @@ export default function AdminDashboard({ onSwitchToUserView }) {
               <div className="metric-icon coin-icon"><Icon name="coins" size={20} /></div>
               <div>
                 <span>Current coins</span>
-                <strong>₹ {formatCoins(selectedTeam.coins)}</strong>
+                <strong style={{ color: selectedTeam.coins < 0 ? '#a43c3c' : '#14213d' }}>
+                  ₹ {formatCoins(selectedTeam.coins)}
+                </strong>
               </div>
             </div>
             <div className="metric">
@@ -408,49 +440,66 @@ export default function AdminDashboard({ onSwitchToUserView }) {
           <div className="numbers-box">
             <span>Numbers obtained</span>
             {selectedTeam.numbers.length > 0 ? (
-              <div className="number-chips" aria-label="Numbers obtained">
-                {selectedTeam.numbers.map((teamNumber) => <b key={teamNumber}>{teamNumber}</b>)}
+              <div className="number-chips">
+                {selectedTeam.numbers.map((n) => <b key={n}>{n}</b>)}
               </div>
             ) : (
               <p>No numbers collected yet.</p>
             )}
           </div>
+
+          <div className="numbers-box" style={{ background: '#fffdf6', borderColor: '#fcedbe' }}>
+            <span style={{ color: '#976100' }}>Required number to win:</span>
+            {selectedTeamBingo.requiredNumbers.length > 0 ? (
+              <div className="number-chips">
+                {selectedTeamBingo.requiredNumbers.map((n) => (
+                  <b key={n} style={{ background: '#fcedbe', color: '#976100' }}>#{n}</b>
+                ))}
+              </div>
+            ) : (
+              <p style={{ color: '#a0782b' }}>None yet (requires 4/5 marked in any line)</p>
+            )}
+          </div>
         </article>
 
-        <section className="update-panel card" aria-labelledby="update-title">
+        {/* MANUAL OVERRIDE / SCORE ADJUSTMENT */}
+        <section className="update-panel card">
           <div className="card-heading form-heading">
             <div>
-              <p className="section-kicker">Admin Controls</p>
-              <h2 id="update-title">Update team record</h2>
+              <p className="section-kicker">Direct Override</p>
+              <h2>Manual Score Adjustment</h2>
             </div>
           </div>
 
-          <form onSubmit={submitUpdate} noValidate>
+          <form onSubmit={submitManualUpdate} noValidate>
             <label>
               <span>Team name</span>
-              <select value={selectedTeamId} onChange={(event) => selectTeam(event.target.value)}>
-                {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+              <select value={selectedTeamId} onChange={(e) => setSelectedTeamId(e.target.value)}>
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} (Balance: ₹{formatCoins(t.coins)})
+                  </option>
+                ))}
               </select>
             </label>
 
             <label>
-              <span>Coins to deduct</span>
+              <span>Coins to deduct (Allows Negative)</span>
               <div className="input-with-prefix">
                 <span>₹</span>
                 <input
                   type="number"
-                  min="1"
+                  min="0"
                   step="1"
-                  inputMode="numeric"
                   placeholder="e.g. 5,000"
                   value={deduction}
-                  onChange={(event) => setDeduction(event.target.value)}
+                  onChange={(e) => setDeduction(e.target.value)}
                 />
               </div>
             </label>
 
             <fieldset>
-              <legend>Question answer</legend>
+              <legend>Award bonus / number?</legend>
               <div className="answer-toggle">
                 <button type="button" className={answer === 'no' ? 'active no-answer' : ''} onClick={() => setAnswer('no')}>No</button>
                 <button type="button" className={answer === 'yes' ? 'active yes-answer' : ''} onClick={() => setAnswer('yes')}>Yes</button>
@@ -466,51 +515,136 @@ export default function AdminDashboard({ onSwitchToUserView }) {
                     <input
                       type="number"
                       min="0"
-                      step="1"
-                      inputMode="numeric"
-                      placeholder="e.g. 2,000"
+                      placeholder="e.g. 5,000"
                       value={bonus}
-                      onChange={(event) => setBonus(event.target.value)}
+                      onChange={(e) => setBonus(e.target.value)}
                     />
                   </div>
                 </label>
                 <label>
-                  <span>Number obtained</span>
+                  <span>Number obtained (1–25)</span>
                   <input
                     type="number"
                     min="1"
                     max="25"
-                    step="1"
-                    inputMode="numeric"
                     placeholder="1–25"
                     value={number}
-                    onChange={(event) => setNumber(event.target.value)}
+                    onChange={(e) => setNumber(e.target.value)}
                   />
                 </label>
               </div>
             )}
 
-            {notice && (
-              <div className={`notice ${notice.type}`} role="status">
-                <Icon name={notice.type === 'success' ? 'check' : 'alert'} size={18} />
-                <span>{notice.text}</span>
-              </div>
-            )}
-
             <button className="update-button" type="submit" disabled={loading}>
-              {loading ? 'Updating...' : 'Update record'} <Icon name="arrow" size={18} />
+              {loading ? 'Updating...' : 'Update Record Directly'} <Icon name="arrow" size={18} />
             </button>
           </form>
         </section>
       </section>
 
-      <section className="standings card" aria-labelledby="standings-title">
+      {/* SECTION 2: SEND QUESTION TO BIDDING TEAM */}
+      <section style={{ marginTop: '24px' }}>
+        <article className="update-panel card">
+          <div className="card-heading form-heading">
+            <div>
+              <p className="section-kicker">Auction Dispatch</p>
+              <h2>Send Question to Bidding Team</h2>
+            </div>
+            <div className="metric-icon" style={{ background: '#edf4ff', color: '#275b9e' }}>
+              <Icon name="send" size={18} />
+            </div>
+          </div>
+
+          {sendSuccess && (
+            <div className="notice success" style={{ marginBottom: '14px' }}>
+              <Icon name="check" size={16} />
+              <span>{sendSuccess}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSendQuestionSubmit}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '12px' }}>
+              <label>
+                <span>Select Winning Bidder Team</span>
+                <select
+                  value={sendTeamId || selectedTeamId}
+                  onChange={(e) => setSendTeamId(e.target.value)}
+                >
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} (Balance: ₹{formatCoins(t.coins)})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <span>Target Number #</span>
+                <input
+                  type="number"
+                  placeholder="e.g. 7"
+                  min="1"
+                  max="25"
+                  value={sendNumberBidded}
+                  onChange={(e) => setSendNumberBidded(e.target.value)}
+                />
+              </label>
+
+              <label>
+                <span>Initial Bid</span>
+                <div className="input-with-prefix">
+                  <span>₹</span>
+                  <input
+                    type="number"
+                    placeholder="500"
+                    value={initialBid}
+                    onChange={(e) => setInitialBid(e.target.value)}
+                  />
+                </div>
+              </label>
+
+              <label>
+                <span>Final Bid</span>
+                <div className="input-with-prefix">
+                  <span>₹</span>
+                  <input
+                    type="number"
+                    placeholder="2000"
+                    value={finalBid}
+                    onChange={(e) => setFinalBid(e.target.value)}
+                  />
+                </div>
+              </label>
+            </div>
+
+            <div className="numbers-box" style={{ marginTop: '6px', marginBottom: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', marginBottom: '4px' }}>
+                <span>Bid Difference (Delta):</span>
+                <strong>₹ {calculatedDelta.toLocaleString()}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                <span>Allowed Challenge Choices:</span>
+                <strong style={{ color: '#275b9e' }}>
+                  {eligibleLevelsPreview.map(lvl => `Level ${lvl}`).join(', ')}
+                </strong>
+              </div>
+            </div>
+
+            <button className="update-button" type="submit">
+              Send Question Choice to Team <Icon name="arrow" size={16} />
+            </button>
+          </form>
+        </article>
+      </section>
+
+      {/* SECTION 3: ALL TEAMS STANDINGS TABLE */}
+      <section className="standings card" style={{ marginTop: '24px' }}>
         <div className="standings-heading">
           <div>
-            <p className="section-kicker">View only</p>
-            <h2 id="standings-title">All team records</h2>
+            <p className="section-kicker">Live Overview</p>
+            <h2>All Team Records & Win Tracker</h2>
           </div>
-          <span>{teams.length} registered teams</span>
+          <span>{teams.length} Registered Teams</span>
         </div>
 
         <div className="table-wrap">
@@ -518,28 +652,77 @@ export default function AdminDashboard({ onSwitchToUserView }) {
             <thead>
               <tr>
                 <th>Team</th>
+                <th>Card Set</th>
                 <th>Coins</th>
-                <th>Numbers collected</th>
-                <th aria-label="Select team" />
+                <th>Numbers</th>
+                <th>Required to Win</th>
+                <th>Status</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {teams.map((team) => (
-                <tr key={team.id} className={team.id === selectedTeamId ? 'selected-row' : ''}>
-                  <td><strong>{team.name}</strong>{team.id === selectedTeamId && <span className="selected-tag">Selected</span>}</td>
-                  <td className="coins-cell">₹ {formatCoins(team.coins)}</td>
-                  <td>
-                    {team.numbers.length ? (
-                      <div className="table-numbers">{team.numbers.map((teamNumber) => <span key={teamNumber}>{teamNumber}</span>)}</div>
-                    ) : <span className="empty-value">None</span>}
-                  </td>
-                  <td><button className="select-button" type="button" onClick={() => selectTeam(team.id)}>Select</button></td>
-                </tr>
-              ))}
+              {teams.map((t) => {
+                const bEval = evaluateBingoCard(t.bingo_card_set || 1, t.numbers || []);
+                const isHalted = Number(t.coins) < 0;
+
+                return (
+                  <tr key={t.id} className={t.id === selectedTeamId ? 'selected-row' : ''}>
+                    <td>
+                      <strong>{t.name}</strong>
+                      {t.id === selectedTeamId && <span className="selected-tag">Selected</span>}
+                    </td>
+                    <td><span className="team-index" style={{ display: 'inline-grid' }}>Set #{t.bingo_card_set || 1}</span></td>
+                    <td className="coins-cell" style={{ color: isHalted ? '#a43c3c' : '#273f64' }}>
+                      ₹ {formatCoins(t.coins)}
+                    </td>
+                    <td>
+                      {t.numbers.length > 0 ? (
+                        <div className="table-numbers">{t.numbers.map((n) => <span key={n}>{n}</span>)}</div>
+                      ) : <span className="empty-value">None</span>}
+                    </td>
+                    <td>
+                      {bEval.requiredNumbers.length > 0 ? (
+                        <div className="table-numbers">
+                          {bEval.requiredNumbers.map((rn) => (
+                            <span key={rn} style={{ background: '#fff7e2', color: '#976100' }}>
+                              #{rn}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="empty-value">—</span>
+                      )}
+                    </td>
+                    <td>
+                      {isHalted ? (
+                        <span style={{ color: '#a43c3c', fontWeight: 800, fontSize: '0.75rem' }}>
+                          Halted (&lt;0)
+                        </span>
+                      ) : (
+                        <span style={{ color: '#23734b', fontWeight: 800, fontSize: '0.75rem' }}>
+                          Active
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <button
+                        className="select-button"
+                        type="button"
+                        onClick={() => {
+                          setSelectedTeamId(t.id);
+                          setSendTeamId(t.id);
+                        }}
+                      >
+                        Select
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </section>
     </main>
   );
-}//AdminDashboarrd.jsx should be edited by naren
+}

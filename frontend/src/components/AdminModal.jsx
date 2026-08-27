@@ -230,12 +230,12 @@ export default function AdminModal({ isOpen, onClose, teams = [] }) {
                     </div>
 
                     <div className="form-input-group">
-                      <label htmlFor="number-won-input">Auction Number Card Won (1–50)</label>
+                      <label htmlFor="number-won-input">Auction Number Card Won (1–25)</label>
                       <input
                         id="number-won-input"
                         type="number"
                         min="1"
-                        max="50"
+                        max="25"
                         placeholder="e.g. 7"
                         value={numberWon}
                         onChange={(e) => setNumberWon(e.target.value)}

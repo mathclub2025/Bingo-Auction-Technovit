@@ -111,7 +111,7 @@ export default function Sidebar({
         <button
           className="sidebar-footer-link"
           onClick={() => {
-            alert("Math Club Auction Rules:\n1. Solve the qualification challenge to unlock bidding.\n2. Submit bid increments of 1,000 Coins.\n3. Highest correct bidder wins the target number.\n4. Incorrect answer incurs a 1,000 Coins penalty.");
+            alert("Mathematics Club VITCC Auction Rules:\n1. Answer the qualification challenge to unlock bidding.\n2. Highest bidded team answers the challenge level.\n3. Completing any 5-number Bingo line wins the event.");
             if (onClose) onClose();
           }}
           type="button"
@@ -122,7 +122,7 @@ export default function Sidebar({
         <button
           className="sidebar-footer-link"
           onClick={() => {
-            alert("For support, contact the math club organizers at the main control computer desk.");
+            alert("For support, contact the Mathematics Club VITCC organizers at the main control desk.");
             if (onClose) onClose();
           }}
           type="button"

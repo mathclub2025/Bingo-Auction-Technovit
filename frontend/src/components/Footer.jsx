@@ -10,10 +10,10 @@ export default function Footer() {
             <div className="footer-mini-mark">
               <Icon name="grid" size={15} />
             </div>
-            <strong>Math Club Auction</strong>
+            <strong>Bingo Auction Arena</strong>
           </div>
           <p className="footer-desc">
-            VIT Chennai · Annual Mathematics Tournament & Live Strategy Arena
+            Conducted by Mathematics Club VITCC for TechnoVIT
           </p>
         </div>
 
@@ -25,7 +25,7 @@ export default function Footer() {
         </div>
 
         <div className="footer-right-section">
-          <span>© 2026 Mathematics Club VIT Chennai.</span>
+          <span>© 2026 Mathematics Club VITCC · TechnoVIT.</span>
           <span className="footer-rights">All rights reserved.</span>
         </div>
       </div>

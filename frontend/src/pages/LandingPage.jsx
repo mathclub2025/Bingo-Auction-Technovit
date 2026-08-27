@@ -18,9 +18,9 @@ export default function LandingPage({ onEnterAuction, teams = [] }) {
     <div className="landing-page-container">
       {/* Top Header with Admin Login */}
       <header className="landing-top-nav">
-        <div className="landing-nav-brand">
-          <Icon name="grid" size={20} />
-          <span>MATH CLUB VIT CHENNAI</span>
+        <div className="landing-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+          <span>MATHEMATICS CLUB VITCC • TECHNOVIT</span>
         </div>
         <button
           className="landing-admin-btn"
@@ -38,16 +38,16 @@ export default function LandingPage({ onEnterAuction, teams = [] }) {
       <section className="landing-hero-section">
         <div className="landing-badge">
           <Icon name="shield" size={14} className="blue-icon" />
-          <span>MATH CLUB AUCTION • ANNUAL TOURNAMENT</span>
+          <span>BINGO AUCTION ARENA • TECHNOVIT • MATHEMATICS CLUB VITCC</span>
         </div>
 
         <h1 className="landing-title">
-          Solve. Bid. <span className="gradient-text">Dominate.</span>
+          Bingo Auction Arena
         </h1>
 
         <p className="landing-subtitle">
-          Welcome to the Math Club Auction platform. Engage in real-time mathematical problem-solving,
-          strategically bid with your team's starting balance of <strong>50,000 Coins</strong>, and collect key numbers to claim victory.
+          Conducted by <strong>Mathematics Club VITCC</strong> for <strong>TechnoVIT</strong>. Engage in real-time mathematical problem-solving,
+          strategically bid with your team's starting balance of <strong>50,000 Coins</strong>, and complete 3 Bingo lines (Horizontal, Vertical, and Diagonal) to claim victory.
         </p>
 
         <div className="landing-cta-group">
@@ -88,7 +88,7 @@ export default function LandingPage({ onEnterAuction, teams = [] }) {
           <div className="feature-icon-wrapper gold">
             <Icon name="grid" size={22} />
           </div>
-          <h3>1–50 Number Cards</h3>
+          <h3>1–25 Number Cards</h3>
           <p>
             Acquire target number cards, unlock milestone bonuses, and lead your team to the top of the live tournament leaderboard.
           </p>

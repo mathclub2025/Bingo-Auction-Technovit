@@ -1,17 +1,18 @@
 import React from 'react';
 
-export default function Icon({ name, size = 20, className = '' }) {
+export default function Icon({ name, size = 20, className = '', color = 'currentColor' }) {
   const common = {
     width: size,
     height: size,
     viewBox: '0 0 24 24',
     fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.9,
+    stroke: color || 'currentColor',
+    strokeWidth: 2,
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
     className: className,
     'aria-hidden': true,
+    style: { display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }
   };
 
   const paths = {
@@ -49,6 +50,14 @@ export default function Icon({ name, size = 20, className = '' }) {
         <circle cx="12" cy="7" r="4" />
       </>
     ),
+    'user-plus': (
+      <>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="8.5" cy="7" r="4" />
+        <line x1="20" y1="8" x2="20" y2="14" />
+        <line x1="23" y1="11" x2="17" y2="11" />
+      </>
+    ),
     clock: (
       <>
         <circle cx="12" cy="12" r="10" />
@@ -62,6 +71,37 @@ export default function Icon({ name, size = 20, className = '' }) {
         <path d="M4 22h16" />
         <path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" />
         <path d="M12 2a6 6 0 0 1 6 6v5a6 6 0 0 1-6 6 6 6 0 0 1-6-6V8a6 6 0 0 1 6-6z" />
+      </>
+    ),
+    gift: (
+      <>
+        <polyline points="20 12 20 22 4 22 4 12" />
+        <rect x="2" y="7" width="20" height="5" />
+        <line x1="12" y1="22" x2="12" y2="7" />
+        <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+        <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+      </>
+    ),
+    target: (
+      <>
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="2" />
+      </>
+    ),
+    star: (
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    ),
+    send: (
+      <>
+        <line x1="22" y1="2" x2="11" y2="13" />
+        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+      </>
+    ),
+    plus: (
+      <>
+        <line x1="12" y1="5" x2="12" y2="19" />
+        <line x1="5" y1="12" x2="19" y2="12" />
       </>
     ),
     x: (

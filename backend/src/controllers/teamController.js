@@ -6,14 +6,16 @@ import {
   insertScoreAuditLog,
   getScoreAuditLogs,
   resetAllTeamsToInitial,
-  addMemberToTeam
+  addMemberToTeam,
+  addCoinsToAllTeams,
+  enrichTeamWithBingo
 } from '../services/teamStore.js';
-import { broadcastTeamUpdate, broadcastAllTeams, broadcastAlert } from '../services/socketService.js';
+import { broadcastTeamUpdate, broadcastAllTeams, broadcastAlert, broadcastTeamsUpdate, broadcastBingoWinner, broadcastBingoWarning } from '../services/socketService.js';
+import { LEVEL_CONFIG } from '../data/questionBank.js';
 
 /**
  * GET /api/teams
  * View all teams with coins and numbers collected (Sorted by coins descending)
- * Accessible to Teams (Read-Only) and Public
  */
 export async function getTeams(req, res) {
   try {
@@ -29,7 +31,7 @@ export async function getTeams(req, res) {
 
 /**
  * POST /api/teams/:id/members
- * Add a new teammate to team_members in Supabase
+ * Add a new teammate to team_members
  */
 export async function addTeamMember(req, res) {
   try {
@@ -50,7 +52,7 @@ export async function addTeamMember(req, res) {
 
     return res.status(201).json({
       success: true,
-      message: `Added ${name} (${regNo}) to team!`,
+      message: `Added ${name} (${regNo}) to team`,
       member: result.member,
       allTeams
     });
@@ -78,14 +80,7 @@ export async function getTeamById(req, res) {
 
 /**
  * POST /api/teams/admin/update
- * Admin / Source Computer Only: Updates team coins, bonus, and numbers collected
- *
- * Payload:
- * - teamId (or teamName)
- * - coinsDeducted (number)
- * - isQuestionAnswered (boolean: true/false or string 'yes'/'no')
- * - bonusCoins (number, if answered yes)
- * - numberObtained (number, if answered yes)
+ * Admin point updates (coins can go negative)
  */
 export async function updateTeamPoints(req, res) {
   try {
@@ -115,7 +110,6 @@ export async function updateTeamPoints(req, res) {
     const prevCoins = Number(team.coins) || 0;
     const deduction = Math.max(0, Number(coinsDeducted) || 0);
 
-    // Normalize answer status
     const isYes = isQuestionAnswered === true ||
       isQuestionAnswered === 'yes' ||
       answerStatus === 'yes';
@@ -123,10 +117,8 @@ export async function updateTeamPoints(req, res) {
     const bonus = isYes ? Math.max(0, Number(bonusCoins || bonusAdded) || 0) : 0;
     const targetNumber = isYes ? (numberObtained !== null ? numberObtained : numberWon) : null;
 
-    // Calculate new coins (never below 0)
-    const newCoins = Math.max(0, prevCoins - deduction + bonus);
+    const newCoins = prevCoins - deduction + bonus;
 
-    // Update numbers collected if answered yes and number provided
     let updatedNumbers = Array.isArray(team.numbers_collected) ? [...team.numbers_collected] : [];
     let numberAdded = null;
 
@@ -138,7 +130,6 @@ export async function updateTeamPoints(req, res) {
       }
     }
 
-    // Update team in database
     const updatedTeam = await updateTeamData(team.id, {
       coins: newCoins,
       numbers_collected: updatedNumbers
@@ -146,7 +137,6 @@ export async function updateTeamPoints(req, res) {
 
     const { password_hash, ...safeUpdatedTeam } = updatedTeam;
 
-    // Log in score_audit_logs table
     const auditLog = await insertScoreAuditLog({
       teamId: team.id,
       coinsDeducted: deduction,
@@ -157,7 +147,12 @@ export async function updateTeamPoints(req, res) {
       newCoins: newCoins
     });
 
-    // Realtime broadcast via Socket.io
+    if (safeUpdatedTeam.isWinner) {
+      broadcastBingoWinner(safeUpdatedTeam);
+    } else if (safeUpdatedTeam.requiredNumbers && safeUpdatedTeam.requiredNumbers.length > 0 && numberAdded) {
+      broadcastBingoWarning(safeUpdatedTeam);
+    }
+
     broadcastTeamUpdate(safeUpdatedTeam, {
       auditLog,
       deduction,
@@ -167,14 +162,14 @@ export async function updateTeamPoints(req, res) {
 
     const allTeams = await getAllTeamsList();
     broadcastAllTeams(allTeams);
+    broadcastTeamsUpdate(allTeams, safeUpdatedTeam);
 
-    // Realtime alert
     broadcastAlert({
       type: isYes ? 'success' : 'deduction',
       teamName: team.team_name,
       message: isYes
-        ? `🎉 ${team.team_name} answered correctly! Deducted: -${deduction.toLocaleString()} | Bonus: +${bonus.toLocaleString()}${numberAdded !== null ? ` | Number Won: #${numberAdded}` : ''}`
-        : `⚠️ ${team.team_name} deducted -${deduction.toLocaleString()} coins.`,
+        ? `${team.team_name} answered correctly. Deducted: -${deduction.toLocaleString()} | Bonus: +${bonus.toLocaleString()}${numberAdded !== null ? ` | Number Won: #${numberAdded}` : ''}`
+        : `${team.team_name} deducted -${deduction.toLocaleString()} coins.`,
       teamId: team.id
     });
 
@@ -182,6 +177,7 @@ export async function updateTeamPoints(req, res) {
       success: true,
       message: `Successfully updated ${team.team_name}`,
       team: safeUpdatedTeam,
+      allTeams,
       auditLog
     });
   } catch (err) {
@@ -191,19 +187,129 @@ export async function updateTeamPoints(req, res) {
 }
 
 /**
+ * POST /api/teams/admin/award-round-bonus
+ * Admin Button: Add 250 coins to EVERY registered team
+ */
+export async function awardRoundBonus(req, res) {
+  try {
+    const bonusAmount = Number(req.body.amount) || 250;
+    await addCoinsToAllTeams(bonusAmount);
+    const allTeams = await getAllTeamsList();
+
+    broadcastAllTeams(allTeams);
+    broadcastTeamsUpdate(allTeams);
+    broadcastAlert({
+      type: 'bonus_round',
+      teamName: 'All Teams',
+      message: `Round Bonus: +${bonusAmount} Coins added to all teams.`
+    });
+
+    return res.json({
+      success: true,
+      message: `Successfully added ${bonusAmount} coins to all registered teams`,
+      teams: allTeams
+    });
+  } catch (err) {
+    console.error('Award round bonus error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to award round bonus' });
+  }
+}
+
+/**
+ * POST /api/teams/admin/resolve-level-5
+ * Admin form for resolving offline Level 5 Dares/Puzzles
+ */
+export async function resolveLevel5(req, res) {
+  try {
+    const {
+      teamId,
+      amountBidded = 0,
+      isAnswerCorrect = false,
+      numberBidded = null,
+      bonusCoins = 5000
+    } = req.body;
+
+    const team = await findTeamById(teamId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+
+    const isCorrect = isAnswerCorrect === true || isAnswerCorrect === 'yes';
+    const bidAmount = Math.max(0, Number(amountBidded) || 0);
+    const bonus = isCorrect ? Math.max(0, Number(bonusCoins) || 5000) : 0;
+    const prevCoins = Number(team.coins) || 0;
+    const newCoins = prevCoins - bidAmount + bonus;
+
+    let updatedNumbers = Array.isArray(team.numbers_collected) ? [...team.numbers_collected] : [];
+    let numberAdded = null;
+
+    if (isCorrect && numberBidded !== null && numberBidded !== undefined && String(numberBidded).trim() !== '') {
+      const numVal = Number(numberBidded);
+      if (!isNaN(numVal) && !updatedNumbers.includes(numVal)) {
+        updatedNumbers.push(numVal);
+        numberAdded = numVal;
+      }
+    }
+
+    const updatedTeam = await updateTeamData(team.id, {
+      coins: newCoins,
+      numbers_collected: updatedNumbers
+    });
+
+    await insertScoreAuditLog({
+      teamId: team.id,
+      coinsDeducted: bidAmount,
+      bonusAdded: bonus,
+      numberWon: numberAdded,
+      answerStatus: isCorrect ? 'yes' : 'no',
+      previousCoins: prevCoins,
+      newCoins: newCoins
+    });
+
+    if (updatedTeam.isWinner) {
+      broadcastBingoWinner(updatedTeam);
+    } else if (updatedTeam.requiredNumbers && updatedTeam.requiredNumbers.length > 0 && numberAdded) {
+      broadcastBingoWarning(updatedTeam);
+    }
+
+    const allTeams = await getAllTeamsList();
+    broadcastAllTeams(allTeams);
+    broadcastTeamsUpdate(allTeams, updatedTeam);
+    broadcastTeamUpdate(updatedTeam);
+
+    broadcastAlert({
+      type: isCorrect ? 'success' : 'deduction',
+      teamName: team.team_name,
+      message: isCorrect
+        ? `Level 5 Passed: ${team.team_name} deducted ${bidAmount} and gained +${bonus} bonus${numberAdded ? ` and Number #${numberAdded}` : ''}.`
+        : `Level 5 Missed: ${team.team_name} deducted ${bidAmount} coins.`
+    });
+
+    return res.json({
+      success: true,
+      message: `Level 5 settled for ${team.team_name}`,
+      team: updatedTeam,
+      allTeams
+    });
+  } catch (err) {
+    console.error('Resolve level 5 error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+/**
  * POST /api/teams/admin/reset-all
  * Admin Only: Reset all teams back to 50,000 coins and 0 numbers
  */
 export async function resetAllTeams(req, res) {
   try {
-    const resetTeams = await resetAllTeamsToInitial();
+    await resetAllTeamsToInitial();
     const allTeams = await getAllTeamsList();
     broadcastAllTeams(allTeams);
+    broadcastTeamsUpdate(allTeams);
 
     return res.json({
       success: true,
       message: 'All teams successfully reset to initial 50,000 coins.',
-      teams: resetTeams
+      teams: allTeams
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

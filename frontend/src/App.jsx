@@ -8,10 +8,12 @@ import Auction from './pages/Auction';
 import TeamProgress from './pages/TeamProgress';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminModal from './components/AdminModal';
+import BingoWarningModal from './components/BingoWarningModal';
 import { io } from 'socket.io-client';
 
 const LOCAL_STORAGE_TEAM_ID_KEY = 'math_club_user_team_id';
 const LOCAL_STORAGE_TEAMS_KEY = 'math_club_user_teams';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 const getInitialPath = () => {
   const path = window.location.pathname;
@@ -28,6 +30,7 @@ export default function App() {
   const [currentSearch, setCurrentSearch] = useState(() => window.location.search);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [activeAuctionState, setActiveAuctionState] = useState('active');
+  const [bingoWarning, setBingoWarning] = useState(null);
 
   // Router navigation helper
   const navigate = (toPath, options = {}) => {
@@ -89,14 +92,16 @@ export default function App() {
   // Fetch real team records from backend API
   const fetchTeamsFromBackend = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/teams');
+      const res = await fetch(`${API_BASE_URL}/api/teams`);
       if (res.ok) {
         const data = await res.json();
-        if (data.teams && Array.isArray(data.teams) && data.teams.length > 0) {
-          const formatted = data.teams.map((t, idx) => ({
+        const rawTeams = Array.isArray(data) ? data : (data.teams || []);
+        if (Array.isArray(rawTeams) && rawTeams.length > 0) {
+          const formatted = rawTeams.map((t, idx) => ({
             id: t.id,
             number: idx + 1,
             name: t.team_name || t.name || 'Unnamed Team',
+            bingo_card_set: t.bingo_card_set || t.bingoCardSet || 1,
             coins: Number(t.coins) || 0,
             numbers: Array.isArray(t.numbers_collected) ? t.numbers_collected : (Array.isArray(t.numbers) ? t.numbers : []),
             rank: idx + 1,
@@ -114,7 +119,7 @@ export default function App() {
   useEffect(() => {
     fetchTeamsFromBackend();
 
-    const socket = io('http://localhost:5000', {
+    const socket = io(API_BASE_URL, {
       transports: ['websocket', 'polling'],
     });
 
@@ -131,6 +136,7 @@ export default function App() {
           number: idx + 1,
           name: t.team_name || t.name,
           team_name: t.team_name || t.name,
+          bingo_card_set: t.bingo_card_set || t.bingoCardSet || 1,
           coins: Number(t.coins) || 0,
           numbers: Array.isArray(t.numbers_collected) ? t.numbers_collected : (Array.isArray(t.numbers) ? t.numbers : []),
           rank: idx + 1,
@@ -145,10 +151,12 @@ export default function App() {
       fetchTeamsFromBackend();
     });
 
-    const interval = setInterval(fetchTeamsFromBackend, 2000);
+    socket.on('bingo:required_number_warning', (data) => {
+      console.log('⚠️ [Bingo Required Number Warning]:', data);
+      setBingoWarning(data);
+    });
 
     return () => {
-      clearInterval(interval);
       socket.disconnect();
     };
   }, []);
@@ -185,6 +193,7 @@ export default function App() {
       ...submittedTeam,
       id: submittedTeam.id,
       name: submittedTeam.team_name || submittedTeam.name,
+      bingo_card_set: submittedTeam.bingo_card_set || submittedTeam.bingoCardSet || 1,
       coins: submittedTeam.coins ?? 50000,
       numbers: submittedTeam.numbers_collected || submittedTeam.numbers || [],
       captain: {
@@ -308,93 +317,108 @@ export default function App() {
     return 'user-dashboard';
   }, [currentPath]);
 
-  // ROUTE 1: Landing Page (/LandingPage)
-  if (currentPath === '/LandingPage') {
-    return <LandingPage onEnterAuction={handleLandingEnter} teams={teams} />;
-  }
+  // Function to render active route page
+  const renderActiveRoute = () => {
+    // ROUTE 1: Landing Page (/LandingPage)
+    if (currentPath === '/LandingPage') {
+      return <LandingPage onEnterAuction={handleLandingEnter} teams={teams} />;
+    }
 
-  // ROUTE 2: Team Login Page (/TeamLogin)
-  if (currentPath === '/TeamLogin') {
-    return (
-      <TeamLogin
-        teams={teams}
-        initialTab={getTeamLoginInitialTab()}
-        onTeamSubmit={handleTeamSubmit}
-        onBackToLanding={() => navigate('/LandingPage')}
-      />
-    );
-  }
-
-  // ROUTE 3: Admin Dashboard Desk (/AdminDashboard)
-  if (currentPath === '/AdminDashboard') {
-    return (
-      <AdminDashboard
-        onSwitchToUserView={() => navigate(selectedTeamId ? '/UserDashboard' : '/LandingPage')}
-      />
-    );
-  }
-
-  // ROUTE GUARD: If accessing UserDashboard without logging in, show Team Entry
-  if (['/UserDashboard', '/Auction', '/TeamProgress'].includes(currentPath) && !selectedTeamId) {
-    return (
-      <TeamLogin
-        teams={teams}
-        initialTab="entry"
-        onTeamSubmit={handleTeamSubmit}
-        onBackToLanding={() => navigate('/LandingPage')}
-      />
-    );
-  }
-
-  // MAIN PORTAL (UserDashboard, Auction, TeamProgress) - Clean Full Width
-  return (
-    <div className="figma-portal-shell full-width">
-      <div className="figma-main-area">
-        {/* Top Navbar */}
-        <Topbar
-          currentView={activeViewName}
-          onViewChange={handleViewChange}
-          activeTeamNumber={activeTeam.number || 1}
-          activeTeamName={activeTeam.name || activeTeam.team_name}
-          activeTeamCoins={activeTeam.coins}
-          onSwitchTeam={handleSwitchTeam}
-          onOpenAdmin={() => handleViewChange('admin')}
+    // ROUTE 2: Team Login Page (/TeamLogin)
+    if (currentPath === '/TeamLogin') {
+      return (
+        <TeamLogin
+          teams={teams}
+          initialTab={getTeamLoginInitialTab()}
+          onTeamSubmit={handleTeamSubmit}
+          onBackToLanding={() => navigate('/LandingPage')}
         />
+      );
+    }
 
-        {/* Dynamic Route Content */}
-        <main className="figma-content-viewport">
-          {currentPath === '/UserDashboard' && (
-            <UserDashboard
-              activeTeam={activeTeam}
-              teams={teams}
-              activeRoundName={mockAuctionRounds.roundName}
-              onNavigate={handleViewChange}
-              onAddTeammate={handleAddTeammate}
-            />
-          )}
+    // ROUTE 3: Admin Dashboard Desk (/AdminDashboard)
+    if (currentPath === '/AdminDashboard') {
+      return (
+        <AdminDashboard
+          onSwitchToUserView={() => navigate(selectedTeamId ? '/UserDashboard' : '/LandingPage')}
+        />
+      );
+    }
 
-          {currentPath === '/Auction' && (
-            <Auction
-              activeTeam={activeTeam}
-              onUpdateTeamCoins={handleUpdateTeamCoins}
-              onAddTeamNumber={handleAddTeamNumber}
-              activeAuctionState={activeAuctionState}
-              setActiveAuctionState={setActiveAuctionState}
-            />
-          )}
+    // ROUTE GUARD: If accessing UserDashboard without logging in, show Team Entry
+    if (['/UserDashboard', '/Auction', '/TeamProgress'].includes(currentPath) && !selectedTeamId) {
+      return (
+        <TeamLogin
+          teams={teams}
+          initialTab="entry"
+          onTeamSubmit={handleTeamSubmit}
+          onBackToLanding={() => navigate('/LandingPage')}
+        />
+      );
+    }
 
-          {currentPath === '/TeamProgress' && (
-            <TeamProgress activeTeam={activeTeam} />
-          )}
-        </main>
+    // MAIN PORTAL (UserDashboard, Auction, TeamProgress) - Clean Full Width
+    return (
+      <div className="figma-portal-shell full-width">
+        <div className="figma-main-area">
+          {/* Top Navbar */}
+          <Topbar
+            currentView={activeViewName}
+            onViewChange={handleViewChange}
+            activeTeamNumber={activeTeam.number || 1}
+            activeTeamName={activeTeam.name || activeTeam.team_name}
+            activeTeamCoins={activeTeam.coins}
+            onSwitchTeam={handleSwitchTeam}
+            onOpenAdmin={() => handleViewChange('admin')}
+          />
+
+          {/* Dynamic Route Content */}
+          <main className="figma-content-viewport">
+            {currentPath === '/UserDashboard' && (
+              <UserDashboard
+                activeTeam={activeTeam}
+                teams={teams}
+                activeRoundName={mockAuctionRounds.roundName}
+                onNavigate={handleViewChange}
+                onAddTeammate={handleAddTeammate}
+              />
+            )}
+
+            {currentPath === '/Auction' && (
+              <Auction
+                activeTeam={activeTeam}
+                onUpdateTeamCoins={handleUpdateTeamCoins}
+                onAddTeamNumber={handleAddTeamNumber}
+                activeAuctionState={activeAuctionState}
+                setActiveAuctionState={setActiveAuctionState}
+              />
+            )}
+
+            {currentPath === '/TeamProgress' && (
+              <TeamProgress activeTeam={activeTeam} />
+            )}
+          </main>
+        </div>
+
+        {/* Admin Modal */}
+        <AdminModal
+          isOpen={adminModalOpen}
+          onClose={() => setAdminModalOpen(false)}
+          teams={teams}
+        />
       </div>
+    );
+  };
 
-      {/* Admin Modal */}
-      <AdminModal
-        isOpen={adminModalOpen}
-        onClose={() => setAdminModalOpen(false)}
-        teams={teams}
+  return (
+    <>
+      {renderActiveRoute()}
+
+      {/* Global Bingo Warning Modal for All Users */}
+      <BingoWarningModal
+        warning={bingoWarning}
+        onClose={() => setBingoWarning(null)}
       />
-    </div>
+    </>
   );
 }

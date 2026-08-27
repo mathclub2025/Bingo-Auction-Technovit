@@ -1,9 +1,28 @@
 import bcrypt from 'bcryptjs';
 import { supabase, isSupabaseConfigured } from '../config/supabase.js';
+import { evaluateBingoCard } from '../data/bingoGrids.js';
 
 // In-memory fallback stores if Supabase credentials are not connected
 const fallbackTeams = new Map();
 const fallbackAuditLogs = [];
+
+/**
+ * Helper to enrich team object with Bingo status (required numbers and win state)
+ */
+export function enrichTeamWithBingo(team) {
+  if (!team) return null;
+  const setNumber = team.bingo_card_set || team.bingoCardSet || 1;
+  const numbers = Array.isArray(team.numbers_collected) ? team.numbers_collected : (Array.isArray(team.numbers) ? team.numbers : []);
+  const evaluation = evaluateBingoCard(setNumber, numbers);
+
+  return {
+    ...team,
+    bingo_card_set: Number(setNumber),
+    isWinner: evaluation.isWinner,
+    completedLinesCount: evaluation.completedLinesCount,
+    requiredNumbers: evaluation.requiredNumbers
+  };
+}
 
 /**
  * Find team by name (case-insensitive)
@@ -17,7 +36,7 @@ export async function findTeamByName(teamName) {
         .select('*')
         .ilike('team_name', trimmed)
         .maybeSingle();
-      if (!error && data) return data;
+      if (!error && data) return enrichTeamWithBingo(data);
     } catch (e) {
       console.warn('[Store] Supabase query failed:', e.message);
     }
@@ -25,7 +44,7 @@ export async function findTeamByName(teamName) {
 
   for (const team of fallbackTeams.values()) {
     if (team.team_name.toLowerCase() === trimmed.toLowerCase()) {
-      return team;
+      return enrichTeamWithBingo(team);
     }
   }
   return null;
@@ -42,21 +61,23 @@ export async function findTeamById(id) {
         .select('*')
         .eq('id', id)
         .maybeSingle();
-      if (!error && data) return data;
+      if (!error && data) return enrichTeamWithBingo(data);
     } catch (e) {
       console.warn('[Store] Supabase query failed:', e.message);
     }
   }
-  return fallbackTeams.get(id) || null;
+  const fallback = fallbackTeams.get(id);
+  return fallback ? enrichTeamWithBingo(fallback) : null;
 }
 
 /**
- * Create a new team with initial 50,000 coins and empty numbers
+ * Create a new team with initial 50,000 coins and selected bingo card set (1-4)
  */
-export async function createTeam({ teamName, passwordHash, role = 'team' }) {
+export async function createTeam({ teamName, passwordHash, role = 'team', bingoCardSet, captainName = '', captainRegNo = '' }) {
   const trimmed = teamName.trim();
   const initialCoins = role === 'admin' ? 0 : 50000;
   const initialNumbers = [];
+  const cardSet = bingoCardSet ? Math.min(4, Math.max(1, Number(bingoCardSet))) : (Math.floor(Math.random() * 4) + 1);
 
   if (isSupabaseConfigured && supabase) {
     try {
@@ -66,6 +87,9 @@ export async function createTeam({ teamName, passwordHash, role = 'team' }) {
           team_name: trimmed,
           password_hash: passwordHash,
           role,
+          bingo_card_set: cardSet,
+          captain_name: captainName || (trimmed + ' Captain'),
+          captain_reg_no: captainRegNo || 'REG_N/A',
           coins: initialCoins,
           numbers_collected: initialNumbers
         })
@@ -73,7 +97,7 @@ export async function createTeam({ teamName, passwordHash, role = 'team' }) {
         .single();
       if (!error && data) {
         fallbackTeams.set(data.id, data);
-        return data;
+        return enrichTeamWithBingo(data);
       }
       if (error) {
         console.warn('[Store] Supabase insert failed:', error.message);
@@ -89,17 +113,20 @@ export async function createTeam({ teamName, passwordHash, role = 'team' }) {
     team_name: trimmed,
     password_hash: passwordHash,
     role,
+    bingo_card_set: cardSet,
+    captain_name: captainName,
+    captain_reg_no: captainRegNo,
     coins: initialCoins,
     numbers_collected: initialNumbers,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
   fallbackTeams.set(id, newTeam);
-  return newTeam;
+  return enrichTeamWithBingo(newTeam);
 }
 
 /**
- * Get all teams ordered by coins descending with their team members
+ * Get all teams ordered by coins descending with their team members and Bingo evaluation
  */
 export async function getAllTeamsList() {
   if (isSupabaseConfigured && supabase) {
@@ -111,6 +138,7 @@ export async function getAllTeamsList() {
           team_name,
           captain_name,
           captain_reg_no,
+          bingo_card_set,
           coins,
           numbers_collected,
           created_at,
@@ -139,10 +167,10 @@ export async function getAllTeamsList() {
               }
             ];
           }
-          return {
+          return enrichTeamWithBingo({
             ...t,
             members
-          };
+          });
         });
       }
       if (error) {
@@ -153,10 +181,11 @@ export async function getAllTeamsList() {
     }
   }
 
-  const list = Array.from(fallbackTeams.values()).map(t => ({
+  const list = Array.from(fallbackTeams.values()).map(t => enrichTeamWithBingo({
     id: t.id,
     team_name: t.team_name,
     role: t.role,
+    bingo_card_set: t.bingo_card_set || 1,
     coins: t.coins,
     numbers_collected: t.numbers_collected || [],
     created_at: t.created_at,
@@ -176,7 +205,7 @@ export async function addMemberToTeam({ teamId, name, regNo, role = 'Teammate' }
 
   if (isSupabaseConfigured && supabase) {
     try {
-      // 1. Check if reg_no is already registered as a Captain of ANY team in teams table
+      // 1. Check if reg_no is already registered as Captain
       const { data: existingCaptain } = await supabase
         .from('teams')
         .select('id, team_name, captain_name, captain_reg_no')
@@ -197,7 +226,7 @@ export async function addMemberToTeam({ teamId, name, regNo, role = 'Teammate' }
         }
       }
 
-      // 2. Check if reg_no is already registered in team_members table (any team)
+      // 2. Check if reg_no is already registered in team_members table
       const { data: existingReg } = await supabase
         .from('team_members')
         .select('id, name, reg_no, role, team_id, teams(team_name)')
@@ -288,7 +317,7 @@ export async function updateTeamData(id, updatePayload) {
         .single();
       if (!error && data) {
         fallbackTeams.set(id, { ...fallbackTeams.get(id), ...data });
-        return data;
+        return enrichTeamWithBingo(data);
       }
     } catch (e) {
       console.warn('[Store] Supabase update failed:', e.message);
@@ -300,7 +329,24 @@ export async function updateTeamData(id, updatePayload) {
 
   const updated = { ...existing, ...updatePayload };
   fallbackTeams.set(id, updated);
-  return updated;
+  return enrichTeamWithBingo(updated);
+}
+
+/**
+ * Add bonus coins to ALL registered teams (e.g. +250 after every 5 rounds)
+ */
+export async function addCoinsToAllTeams(amount = 250) {
+  const teams = await getAllTeamsList();
+  const updatedTeams = [];
+
+  for (const team of teams) {
+    if (team.role === 'admin') continue;
+    const newCoins = (Number(team.coins) || 0) + Number(amount);
+    const updated = await updateTeamData(team.id, { coins: newCoins });
+    if (updated) updatedTeams.push(updated);
+  }
+
+  return updatedTeams;
 }
 
 /**
@@ -369,7 +415,7 @@ export async function resetAllTeamsToInitial() {
   const teams = await getAllTeamsList();
   const resetResults = [];
   for (const team of teams) {
-    if (team.role === 'team') {
+    if (team.role === 'team' || !team.role) {
       const updated = await updateTeamData(team.id, {
         coins: 50000,
         numbers_collected: []

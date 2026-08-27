@@ -65,17 +65,21 @@ async function request(endpoint, options = {}) {
 }
 
 // ============================================================================
-// TEAM AUTHENTICATION (Backend Connected)
+// TEAM AUTHENTICATION
 // ============================================================================
 
 /**
- * Register a new team with captain details (Passwordless)
- * Inputs: { teamName, captainName, captainRegNo }
+ * Register a new team with captain details and Bingo Card Set (1 to 4)
  */
-export async function registerTeam({ teamName, captainName, captainRegNo }) {
+export async function registerTeam({ teamName, captainName, captainRegNo, bingoCardSet = 1 }) {
   const res = await request('/api/auth/team/register', {
     method: 'POST',
-    body: JSON.stringify({ teamName, captainName, captainRegNo }),
+    body: JSON.stringify({
+      teamName,
+      captainName,
+      captainRegNo,
+      bingoCardSet: Number(bingoCardSet) || 1
+    }),
   });
   if (res.token) {
     setToken(res.token);
@@ -84,13 +88,12 @@ export async function registerTeam({ teamName, captainName, captainRegNo }) {
 }
 
 /**
- * Team Entry / Login using registered Team Name (Passwordless)
- * Inputs: { teamName }
+ * Team Entry / Login using registered Team Name & Captain Registration Number
  */
-export async function loginTeam({ teamName }) {
+export async function loginTeam({ teamName, captainRegNo }) {
   const res = await request('/api/auth/team/entry', {
     method: 'POST',
-    body: JSON.stringify({ teamName }),
+    body: JSON.stringify({ teamName, captainRegNo }),
   });
   if (res.token) {
     setToken(res.token);
@@ -99,12 +102,11 @@ export async function loginTeam({ teamName }) {
 }
 
 // ============================================================================
-// ADMIN AUTHENTICATION (Backend Connected)
+// ADMIN AUTHENTICATION & CONTROLS
 // ============================================================================
 
 /**
  * Admin Login with Username + Password
- * Inputs: { username, password }
  */
 export async function loginAdmin({ username, password }) {
   const res = await request('/api/auth/admin/login', {
@@ -118,12 +120,40 @@ export async function loginAdmin({ username, password }) {
 }
 
 /**
- * Add a new teammate directly into Supabase database (team_members table)
+ * Add a new teammate directly into database
  */
 export async function addTeammateToDatabase(teamId, { name, regNo, role = 'Teammate' }) {
   const res = await request(`/api/teams/${teamId}/members`, {
     method: 'POST',
     body: JSON.stringify({ name, regNo, role }),
+  });
+  return res;
+}
+
+/**
+ * Award round bonus (+250 coins) to all teams
+ */
+export async function awardRoundBonus(amount = 250) {
+  const res = await request('/api/teams/admin/award-round-bonus', {
+    method: 'POST',
+    body: JSON.stringify({ amount }),
+  });
+  return res;
+}
+
+/**
+ * Resolve Level 5 Offline Dare/Puzzle
+ */
+export async function resolveLevel5({ teamId, amountBidded, isAnswerCorrect, numberBidded, bonusCoins }) {
+  const res = await request('/api/teams/admin/resolve-level-5', {
+    method: 'POST',
+    body: JSON.stringify({
+      teamId,
+      amountBidded,
+      isAnswerCorrect,
+      numberBidded,
+      bonusCoins
+    }),
   });
   return res;
 }

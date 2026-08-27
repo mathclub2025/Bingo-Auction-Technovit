@@ -29,12 +29,12 @@ export default function Topbar({
     <>
       <header className="figma-topbar">
         <div className="topbar-brand-area">
-          <div className="topbar-brand-icon">
-            <Icon name="grid" size={18} />
+          <div className="topbar-brand-icon" style={{ background: 'transparent', boxShadow: 'none' }}>
+            <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
           </div>
           <div className="topbar-brand-text">
-            <h2>Math Club Auction</h2>
-            <span className="topbar-sub">VIT CHENNAI</span>
+            <h2>Bingo Auction Arena</h2>
+            <span className="topbar-sub">MATHEMATICS CLUB VITCC • TECHNOVIT</span>
           </div>
         </div>
 
