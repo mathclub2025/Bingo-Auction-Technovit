@@ -12,7 +12,15 @@ import {
   deleteTeamById,
   clearEntireDatabaseFromStore
 } from '../services/teamStore.js';
-import { broadcastTeamUpdate, broadcastAllTeams, broadcastAlert, broadcastTeamsUpdate, broadcastBingoWinner, broadcastBingoWarning } from '../services/socketService.js';
+import {
+  broadcastTeamUpdate,
+  broadcastAllTeams,
+  broadcastAlert,
+  broadcastTeamsUpdate,
+  broadcastBingoWinner,
+  broadcastBingoWarning,
+  resetBingoWarnings
+} from '../services/socketService.js';
 import { LEVEL_CONFIG } from '../data/questionBank.js';
 
 /**
@@ -304,6 +312,7 @@ export async function resolveLevel5(req, res) {
 export async function resetAllTeams(req, res) {
   try {
     await resetAllTeamsToInitial();
+    resetBingoWarnings();
     const allTeams = await getAllTeamsList();
     broadcastAllTeams(allTeams);
     broadcastTeamsUpdate(allTeams);
@@ -373,6 +382,7 @@ export async function deleteTeam(req, res) {
 export async function clearDatabase(req, res) {
   try {
     await clearEntireDatabaseFromStore();
+    resetBingoWarnings();
     broadcastAllTeams([]);
     broadcastTeamsUpdate([]);
     broadcastAlert({

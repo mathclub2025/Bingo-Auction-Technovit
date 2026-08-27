@@ -185,8 +185,19 @@ export default function App() {
       fetchTeamsFromBackend();
     });
 
+    const seenWarningKeys = new Set();
+
     socket.on('bingo:required_number_warning', (data) => {
-      console.log('⚠️ [Bingo Required Number Warning]:', data);
+      if (!data || !data.teamId || !Array.isArray(data.requiredNumbers) || data.requiredNumbers.length === 0) return;
+
+      const warningKey = `${data.teamId}_${data.requiredNumbers.slice().sort().join('-')}`;
+      if (seenWarningKeys.has(warningKey)) {
+        console.log(`⚠️ [Bingo Warning] Suppressed duplicate modal for ${data.teamName || data.teamId} (${warningKey})`);
+        return;
+      }
+
+      seenWarningKeys.add(warningKey);
+      console.log('⚠️ [Bingo Required Number Warning Displayed]:', data);
       setBingoWarning(data);
     });
 

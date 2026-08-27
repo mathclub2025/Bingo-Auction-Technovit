@@ -230,22 +230,46 @@ export function broadcastBingoWinner(winnerTeam) {
   }
 }
 
+// Set of warned team numbers to prevent repeated popups: Set<`${teamId}_${num}`>
+const warnedTeamNumberKeys = new Set();
+
 /**
- * Broadcast Bingo 1-Number-Away Warning across all screens
+ * Reset warned bingo keys (e.g. on tournament reset or database clear)
+ */
+export function resetBingoWarnings() {
+  warnedTeamNumberKeys.clear();
+}
+
+/**
+ * Broadcast Bingo 1-Number-Away Warning across all screens ONCE per number per team
  */
 export function broadcastBingoWarning(team) {
   if (globalIo && team) {
     const requiredNumbers = Array.isArray(team.requiredNumbers) ? team.requiredNumbers : [];
     if (requiredNumbers.length > 0 && !team.isWinner) {
+      // Find required numbers that have NOT been alerted yet for this team
+      const newRequiredNumbers = requiredNumbers.filter(
+        (num) => !warnedTeamNumberKeys.has(`${team.id}_${num}`)
+      );
+
+      // If all required winning numbers for this team have already been alerted, DO NOT trigger again
+      if (newRequiredNumbers.length === 0) {
+        return;
+      }
+
+      // Mark these numbers as alerted
+      newRequiredNumbers.forEach((num) => warnedTeamNumberKeys.add(`${team.id}_${num}`));
+
       globalIo.emit('bingo:required_number_warning', {
         teamId: team.id,
         teamName: team.team_name || team.name,
-        requiredNumbers: requiredNumbers,
+        requiredNumbers: newRequiredNumbers,
+        allRequiredNumbers: requiredNumbers,
         bingoCardSet: team.bingo_card_set || 1,
-        message: `${team.team_name || team.name} requires number${requiredNumbers.length > 1 ? 's' : ''} ${requiredNumbers.map(n => '#' + n).join(', ')} to WIN Bingo!`,
+        message: `${team.team_name || team.name} requires number${newRequiredNumbers.length > 1 ? 's' : ''} ${newRequiredNumbers.map(n => '#' + n).join(', ')} to WIN Bingo!`,
         timestamp: new Date().toISOString()
       });
-      console.log(`[BINGO WARNING] Team ${team.team_name || team.name} needs ${requiredNumbers.join(', ')} to win!`);
+      console.log(`[BINGO WARNING] Team ${team.team_name || team.name} needs ${newRequiredNumbers.join(', ')} to win! (Broadcasted once)`);
     }
   }
 }
