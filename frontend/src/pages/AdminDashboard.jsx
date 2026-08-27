@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { initialTeams } from '../data/mockTeams';
 import Icon from '../components/Icon';
-import { loginAdmin, getAdminToken, removeAdminToken, awardRoundBonus } from '../services/api';
+import { loginAdmin, getAdminToken, removeAdminToken, awardRoundBonus, deleteTeamFromDatabase, clearDatabaseFromAdmin } from '../services/api';
 import { evaluateBingoCard } from '../data/bingoGrids';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
@@ -60,14 +60,17 @@ export default function AdminDashboard({ onSwitchToUserView }) {
     return Math.max(0, fin - init);
   }, [initialBid, finalBid]);
 
-  // Compute Eligible Levels preview
+  // Compute Eligible Levels preview:
+  // 0 - 3000 -> [1, 2, 3]
+  // 3001 - 7000 -> [2, 3]
+  // 7001 - 9500 -> [3]
+  // > 9500 -> [4] (PPT Dare Round activated)
   const eligibleLevelsPreview = useMemo(() => {
     const delta = calculatedDelta;
-    if (delta <= 800) return [1, 2, 3, 4, 5];
-    if (delta <= 1900) return [2, 3, 4, 5];
-    if (delta <= 4000) return [3, 4, 5];
-    if (delta <= 9000) return [4, 5];
-    return [5];
+    if (delta <= 3000) return [1, 2, 3];
+    if (delta <= 7000) return [2, 3];
+    if (delta <= 9500) return [3];
+    return [4];
   }, [calculatedDelta]);
 
   // Fetch real team records from backend API
@@ -77,16 +80,16 @@ export default function AdminDashboard({ onSwitchToUserView }) {
       if (res.ok) {
         const data = await res.json();
         const rawTeams = Array.isArray(data) ? data : (data.teams || []);
-        if (Array.isArray(rawTeams) && rawTeams.length > 0) {
+        if (Array.isArray(rawTeams)) {
           const formatted = rawTeams.map(formatTeam);
           setTeams(formatted);
           setSelectedTeamId((prevId) => {
             if (prevId && formatted.some((t) => String(t.id) === String(prevId))) {
               return prevId;
             }
-            return formatted[0].id;
+            return formatted[0]?.id || '';
           });
-          setSendTeamId((prev) => prev || formatted[0].id);
+          setSendTeamId((prev) => prev || formatted[0]?.id || '');
         }
       }
     } catch (err) {
@@ -125,8 +128,8 @@ export default function AdminDashboard({ onSwitchToUserView }) {
         fetchTeamsFromBackend();
       });
 
-      // Notification when a team chooses Level 5 (pre-fills the manual score adjustment form)
-      newSocket.on('auction:admin_level_5_pending', (payload) => {
+      // Notification when a team chooses Level 4 PPT Dare/Puzzle
+      const handlePendingPpt = (payload) => {
         setSelectedTeamId(payload.teamId);
         setDeduction(String(payload.finalBid || ''));
         setNumber(String(payload.numberBidded || ''));
@@ -134,9 +137,12 @@ export default function AdminDashboard({ onSwitchToUserView }) {
         setBonus('5000');
         setNotice({
           type: 'success',
-          text: `${payload.teamName} selected Level 5 (Offline PPT). Manual score adjustment pre-filled below.`
+          text: `${payload.teamName} selected Level 4 (Offline PPT). Manual score adjustment pre-filled below.`
         });
-      });
+      };
+
+      newSocket.on('auction:admin_level_4_pending', handlePendingPpt);
+      newSocket.on('auction:admin_level_5_pending', handlePendingPpt);
 
       return () => {
         newSocket.disconnect();
@@ -232,7 +238,46 @@ export default function AdminDashboard({ onSwitchToUserView }) {
     }
   };
 
-  // 3. Manual Score Adjustment Submit (Handles Deductions, Level 5 Dares, and Bonuses)
+  // 3. Remove a Single Team
+  const handleDeleteTeam = async (teamId, teamName) => {
+    if (!window.confirm(`Are you sure you want to remove team "${teamName}" from the tournament?`)) {
+      return;
+    }
+    try {
+      setLoading(true);
+      await deleteTeamFromDatabase(teamId);
+      setTeams((prev) => prev.filter((t) => String(t.id) !== String(teamId)));
+      if (String(selectedTeamId) === String(teamId)) {
+        setSelectedTeamId('');
+      }
+      setNotice({ type: 'success', text: `Team "${teamName}" was removed successfully.` });
+    } catch (err) {
+      setNotice({ type: 'error', text: err.message || 'Failed to delete team.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 4. Clear Entire Database
+  const handleClearDatabase = async () => {
+    if (!window.confirm('⚠️ DANGER: Are you sure you want to CLEAR the entire tournament database?\n\nAll teams, rosters, and scores will be permanently wiped for a fresh start. Admin accounts will remain active.')) {
+      return;
+    }
+    try {
+      setLoading(true);
+      await clearDatabaseFromAdmin();
+      setTeams([]);
+      setSelectedTeamId('');
+      setSendTeamId('');
+      setNotice({ type: 'success', text: 'Entire tournament database cleared successfully.' });
+    } catch (err) {
+      setNotice({ type: 'error', text: err.message || 'Failed to clear database.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 5. Manual Score Adjustment Submit (Handles Deductions, Level 4 Dares, and Bonuses)
   const submitManualUpdate = async (e) => {
     e.preventDefault();
     setNotice(null);
@@ -365,7 +410,7 @@ export default function AdminDashboard({ onSwitchToUserView }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {/* Quick 250 Bonus Coins Button */}
           <button
             type="button"
@@ -376,7 +421,7 @@ export default function AdminDashboard({ onSwitchToUserView }) {
               background: '#047857',
               color: '#ffffff',
               borderColor: '#047857',
-              padding: '8px 16px',
+              padding: '8px 14px',
               fontWeight: 800,
               fontSize: '0.78rem',
               display: 'flex',
@@ -388,11 +433,34 @@ export default function AdminDashboard({ onSwitchToUserView }) {
             <span>+250 Coins (All Teams Round Bonus)</span>
           </button>
 
+          {/* Clear Tournament Database Button */}
+          <button
+            type="button"
+            onClick={handleClearDatabase}
+            disabled={loading}
+            className="select-button"
+            style={{
+              background: '#fff1f2',
+              color: '#be123c',
+              borderColor: '#fecdd3',
+              padding: '8px 12px',
+              fontWeight: 800,
+              fontSize: '0.78rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}
+            title="Clear all teams, rosters and scores"
+          >
+            <Icon name="alert" size={14} />
+            <span>Clear Database</span>
+          </button>
+
           <button
             type="button"
             onClick={handleAdminLogout}
             className="select-button"
-            style={{ padding: '8px 14px', fontSize: '0.78rem', color: '#a43c3c', borderColor: '#f9dddd', fontWeight: 700 }}
+            style={{ padding: '8px 12px', fontSize: '0.78rem', color: '#64748b', borderColor: '#cbd5e1', fontWeight: 700 }}
           >
             Sign Out
           </button>
@@ -460,6 +528,31 @@ export default function AdminDashboard({ onSwitchToUserView }) {
               <p style={{ color: '#a0782b' }}>None yet (requires 4/5 marked in any line)</p>
             )}
           </div>
+
+          {selectedTeam.id && (
+            <button
+              type="button"
+              onClick={() => handleDeleteTeam(selectedTeam.id, selectedTeam.name)}
+              className="select-button"
+              style={{
+                marginTop: '14px',
+                width: '100%',
+                padding: '8px 12px',
+                fontSize: '0.8rem',
+                color: '#be123c',
+                borderColor: '#fecdd3',
+                background: '#fff1f2',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
+            >
+              <Icon name="x" size={14} />
+              <span>Remove Team "{selectedTeam.name}" from Event</span>
+            </button>
+          )}
         </article>
 
         {/* MANUAL OVERRIDE / SCORE ADJUSTMENT */}
@@ -704,7 +797,7 @@ export default function AdminDashboard({ onSwitchToUserView }) {
                         </span>
                       )}
                     </td>
-                    <td>
+                    <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                       <button
                         className="select-button"
                         type="button"
@@ -714,6 +807,15 @@ export default function AdminDashboard({ onSwitchToUserView }) {
                         }}
                       >
                         Select
+                      </button>
+                      <button
+                        className="select-button"
+                        type="button"
+                        onClick={() => handleDeleteTeam(t.id, t.name)}
+                        style={{ color: '#be123c', borderColor: '#fecdd3', background: '#fff1f2', padding: '6px 8px' }}
+                        title={`Remove ${t.name}`}
+                      >
+                        <Icon name="x" size={13} />
                       </button>
                     </td>
                   </tr>

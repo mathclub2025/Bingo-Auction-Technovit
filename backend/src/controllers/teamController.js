@@ -8,7 +8,9 @@ import {
   resetAllTeamsToInitial,
   addMemberToTeam,
   addCoinsToAllTeams,
-  enrichTeamWithBingo
+  enrichTeamWithBingo,
+  deleteTeamById,
+  clearEntireDatabaseFromStore
 } from '../services/teamStore.js';
 import { broadcastTeamUpdate, broadcastAllTeams, broadcastAlert, broadcastTeamsUpdate, broadcastBingoWinner, broadcastBingoWarning } from '../services/socketService.js';
 import { LEVEL_CONFIG } from '../data/questionBank.js';
@@ -328,3 +330,66 @@ export async function getAuditLogs(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
+/**
+ * DELETE /api/teams/:id or POST /api/teams/admin/delete
+ * Remove a specific team from the database
+ */
+export async function deleteTeam(req, res) {
+  try {
+    const teamId = req.params.id || req.body.teamId;
+    if (!teamId) {
+      return res.status(400).json({ error: 'Team ID is required.' });
+    }
+
+    const team = await findTeamById(teamId);
+    const teamName = team ? team.team_name : teamId;
+
+    await deleteTeamById(teamId);
+    const allTeams = await getAllTeamsList();
+    broadcastAllTeams(allTeams);
+    broadcastTeamsUpdate(allTeams);
+    broadcastAlert({
+      type: 'deduction',
+      teamName: teamName,
+      message: `Team "${teamName}" was removed from the tournament.`
+    });
+
+    return res.json({
+      success: true,
+      message: `Team "${teamName}" successfully removed.`,
+      allTeams
+    });
+  } catch (err) {
+    console.error('Delete team error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to delete team.' });
+  }
+}
+
+/**
+ * POST /api/teams/admin/clear-database
+ * Clear all teams, team members, and score audit logs
+ */
+export async function clearDatabase(req, res) {
+  try {
+    await clearEntireDatabaseFromStore();
+    broadcastAllTeams([]);
+    broadcastTeamsUpdate([]);
+    broadcastAlert({
+      type: 'bonus_round',
+      teamName: 'Admin',
+      message: 'Tournament database cleared successfully.'
+    });
+
+    return res.json({
+      success: true,
+      message: 'Entire tournament database cleared successfully. Admin login preserved.',
+      allTeams: []
+    });
+  } catch (err) {
+    console.error('Clear database error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to clear database.' });
+  }
+}
+
+export const resolveLevel4 = resolveLevel5;

@@ -350,14 +350,13 @@ export default function UserDashboard({
             </div>
 
             <div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
-              {[1, 2, 3, 4, 5].map((lvl) => {
+              {[1, 2, 3, 4].map((lvl) => {
                 const isEligible = questionOffer.eligibleLevels.includes(lvl);
                 const levelLabels = {
                   1: 'Level 1: 30s Timer • +500 Bonus Coins',
                   2: 'Level 2: 45s Timer • +1,000 Bonus Coins',
                   3: 'Level 3: 60s Timer • +2,000 Bonus Coins',
-                  4: 'Level 4: 90s Timer • +3,500 Bonus Coins',
-                  5: 'Level 5: Dares & Tricky Puzzles (Offline PPT)'
+                  4: 'Level 4: Offline PPT Dare/Puzzle Round (+5,000 Bonus Coins)'
                 };
 
                 return (
@@ -370,16 +369,20 @@ export default function UserDashboard({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '12px 16px',
+                      padding: '14px 18px',
                       borderRadius: '8px',
-                      opacity: isEligible ? 1 : 0.45,
+                      opacity: isEligible ? 1 : 0.4,
                       cursor: isEligible ? 'pointer' : 'not-allowed',
-                      textAlign: 'left'
+                      textAlign: 'left',
+                      borderColor: isEligible ? (lvl === 4 ? '#b45309' : '#265da8') : '#e2e8f0',
+                      background: isEligible ? (lvl === 4 ? '#fffbeb' : '#ffffff') : '#f8fafc'
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>Level {lvl}</div>
-                      <div style={{ fontSize: '0.74rem', color: '#70809b' }}>{levelLabels[lvl]}</div>
+                      <div style={{ fontWeight: 800, fontSize: '0.92rem', color: isEligible && lvl === 4 ? '#92400e' : 'inherit' }}>
+                        Level {lvl} {lvl === 4 && '★ (PPT Dare/Puzzle)'}
+                      </div>
+                      <div style={{ fontSize: '0.76rem', color: isEligible && lvl === 4 ? '#b45309' : '#70809b' }}>{levelLabels[lvl]}</div>
                     </div>
                     {isEligible && <Icon name="arrow" size={14} />}
                   </button>
@@ -390,86 +393,143 @@ export default function UserDashboard({
         </div>
       )}
 
-      {/* STEP 2 MODAL: QUESTION WITH COUNTDOWN TIMER (LEVELS 1–4) */}
+      {/* STEP 2 MODAL: QUESTION WITH ULTRA-PROMINENT COUNTDOWN TIMER (LEVELS 1–3) */}
       {activeQuestion && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(20, 33, 61, 0.8)',
-            backdropFilter: 'blur(5px)',
+            background: 'rgba(15, 23, 42, 0.85)',
+            backdropFilter: 'blur(6px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 9000,
-            padding: '20px'
+            zIndex: 9999,
+            padding: '16px'
           }}
         >
-          <div className="card" style={{ maxWidth: '580px', width: '100%', padding: '28px', background: '#fff' }}>
-            <div className="card-heading form-heading" style={{ marginBottom: '16px' }}>
+          <div className="card" style={{ maxWidth: '620px', width: '100%', padding: '0', background: '#fff', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)' }}>
+            
+            {/* PROMINENT HIGH-VISIBILITY TIMER BANNER */}
+            <div
+              style={{
+                background: timerRemaining <= 10
+                  ? 'linear-gradient(135deg, #b91c1c, #ef4444)'
+                  : 'linear-gradient(135deg, #0f766e, #0d9488)',
+                color: '#ffffff',
+                padding: '18px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                transition: 'all 0.3s ease',
+                boxShadow: timerRemaining <= 10 ? '0 0 25px rgba(239, 68, 68, 0.6)' : 'none'
+              }}
+            >
               <div>
-                <p className="section-kicker">Level {activeQuestion.level} Challenge</p>
-                <h2>Bonus Reward: +₹{activeQuestion.bonusCoins}</h2>
+                <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.9, fontWeight: 700 }}>
+                  Level {activeQuestion.level} Challenge • +{formatCoins(activeQuestion.bonusCoins)} Coins
+                </div>
+                <div style={{ fontSize: '0.86rem', fontWeight: 600, opacity: 0.95 }}>
+                  {timerRemaining <= 10 ? '⚠️ TIME RUNNING OUT!' : 'Solve within allotted time:'}
+                </div>
               </div>
+
+              {/* GIANT COUNTDOWN CLOCK */}
               <div
-                className="admin-status"
                 style={{
-                  color: timerRemaining <= 10 ? '#a44949' : '#28714b',
-                  borderColor: timerRemaining <= 10 ? '#f9dddd' : '#d9e8df',
-                  background: timerRemaining <= 10 ? '#fff5f5' : '#f6fcf8'
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(0, 0, 0, 0.25)',
+                  padding: '8px 18px',
+                  borderRadius: '12px',
+                  border: '1.5px solid rgba(255, 255, 255, 0.3)'
                 }}
               >
-                <Icon name="clock" size={14} />
-                <span>{timerRemaining}s Remaining</span>
+                <Icon name="clock" size={24} />
+                <span
+                  style={{
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: '1.75rem',
+                    fontWeight: 900,
+                    letterSpacing: '0.05em',
+                    lineHeight: 1
+                  }}
+                >
+                  00:{timerRemaining.toString().padStart(2, '0')}s
+                </span>
               </div>
             </div>
 
-            <div className="numbers-box" style={{ padding: '16px', marginBottom: '18px' }}>
-              <p style={{ margin: 0, fontSize: '1.02rem', fontWeight: 700, color: '#14213d', lineHeight: 1.45 }}>
-                {activeQuestion.question}
-              </p>
+            {/* PROGRESS BAR */}
+            <div style={{ height: '6px', background: '#e2e8f0', width: '100%' }}>
+              <div
+                style={{
+                  height: '100%',
+                  width: `${Math.max(0, Math.min(100, (timerRemaining / (activeQuestion.timerSeconds || 30)) * 100))}%`,
+                  background: timerRemaining <= 10 ? '#dc2626' : '#10b981',
+                  transition: 'width 1s linear, background-color 0.3s ease'
+                }}
+              />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
-              {activeQuestion.options.map((opt, idx) => {
-                const isSelected = selectedOption === opt;
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    disabled={isSubmittingAnswer}
-                    onClick={() => setSelectedOption(opt)}
-                    className="select-button"
-                    style={{
-                      padding: '12px',
-                      textAlign: 'center',
-                      fontWeight: 700,
-                      fontSize: '0.88rem',
-                      background: isSelected ? '#edf4ff' : '#fff',
-                      borderColor: isSelected ? '#265da8' : '#d9e5f6',
-                      color: isSelected ? '#265da8' : '#14213d'
-                    }}
-                  >
-                    {opt}
-                  </button>
-                );
-              })}
-            </div>
+            <div style={{ padding: '24px 28px' }}>
+              <div className="numbers-box" style={{ padding: '18px 20px', marginBottom: '20px', background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px' }}>
+                <p style={{ margin: 0, fontSize: '1.08rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.5 }}>
+                  {activeQuestion.question}
+                </p>
+              </div>
 
-            <button
-              className="update-button"
-              disabled={!selectedOption || isSubmittingAnswer}
-              onClick={() => handleAnswerSubmit(selectedOption)}
-              style={{ width: '100%' }}
-            >
-              <span>{isSubmittingAnswer ? 'Verifying...' : 'Submit Answer'}</span>
-              <Icon name="check" size={16} />
-            </button>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '22px' }}>
+                {activeQuestion.options.map((opt, idx) => {
+                  const isSelected = selectedOption === opt;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      disabled={isSubmittingAnswer}
+                      onClick={() => setSelectedOption(opt)}
+                      className="select-button"
+                      style={{
+                        padding: '14px 16px',
+                        textAlign: 'center',
+                        fontWeight: 800,
+                        fontSize: '0.95rem',
+                        borderRadius: '10px',
+                        background: isSelected ? '#eff6ff' : '#ffffff',
+                        borderColor: isSelected ? '#2563eb' : '#cbd5e1',
+                        color: isSelected ? '#1d4ed8' : '#1e293b',
+                        boxShadow: isSelected ? '0 0 0 2px rgba(37, 99, 235, 0.2)' : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                className="update-button"
+                disabled={!selectedOption || isSubmittingAnswer}
+                onClick={() => handleAnswerSubmit(selectedOption)}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  fontSize: '1rem',
+                  fontWeight: 800,
+                  borderRadius: '10px'
+                }}
+              >
+                <span>{isSubmittingAnswer ? 'Verifying...' : 'Confirm & Submit Answer'}</span>
+                <Icon name="check" size={18} />
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* STEP 3 MODAL: LEVEL 5 PPT NOTICE */}
+      {/* STEP 3 MODAL: LEVEL 4 PPT NOTICE */}
       {level5PptNotice && (
         <div
           style={{
@@ -488,7 +548,7 @@ export default function UserDashboard({
             <div className="metric-icon coin-icon" style={{ margin: '0 auto 14px' }}>
               <Icon name="shield" size={20} />
             </div>
-            <p className="section-kicker">Level 5 Challenge</p>
+            <p className="section-kicker">Level 4 Challenge</p>
             <h2 style={{ fontSize: '1.25rem', margin: '6px 0 14px' }}>Please refer the ppt question displayed</h2>
             <p style={{ color: '#61708a', fontSize: '0.86rem', marginBottom: '20px' }}>
               Your choice has been transmitted to the host desk. The host will evaluate your dare/puzzle on stage.

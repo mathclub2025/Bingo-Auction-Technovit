@@ -425,3 +425,42 @@ export async function resetAllTeamsToInitial() {
   }
   return resetResults;
 }
+
+/**
+ * Delete a single team by ID and cascade clean related records
+ */
+export async function deleteTeamById(teamId) {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from('score_audit_logs').delete().eq('team_id', teamId);
+      await supabase.from('team_members').delete().eq('team_id', teamId);
+      const { error } = await supabase.from('teams').delete().eq('id', teamId);
+      if (error) throw error;
+    } catch (e) {
+      console.warn('[Store] Supabase deleteTeamById error:', e.message);
+    }
+  }
+
+  fallbackTeams.delete(teamId);
+  return { success: true, teamId };
+}
+
+/**
+ * Clear the entire tournament database (teams, team_members, score_audit_logs)
+ * Preserves admin accounts in admin_users
+ */
+export async function clearEntireDatabaseFromStore() {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from('score_audit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('team_members').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('teams').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    } catch (e) {
+      console.warn('[Store] Supabase clearEntireDatabaseFromStore error:', e.message);
+    }
+  }
+
+  fallbackTeams.clear();
+  fallbackAuditLogs.length = 0;
+  return { success: true };
+}

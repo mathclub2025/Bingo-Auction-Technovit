@@ -68,8 +68,15 @@ export function setupSocketService(io) {
         const initBid = Number(initialBid) || 0;
         const numBidded = Number(numberBidded) || null;
 
-        if (selectedLevel === 5) {
-          // LEVEL 5 SPECIAL FLOW: PPT Display
+        if (selectedLevel === 4 || selectedLevel === 5) {
+          // LEVEL 4 SPECIAL FLOW: PPT Display
+          io.to(`team_${team.id}`).emit('auction:level_4_ppt', {
+            teamId: team.id,
+            teamName: team.team_name,
+            finalBid: finBid,
+            numberBidded: numBidded,
+            message: 'Please refer the ppt question displayed'
+          });
           io.to(`team_${team.id}`).emit('auction:level_5_ppt', {
             teamId: team.id,
             teamName: team.team_name,
@@ -79,19 +86,22 @@ export function setupSocketService(io) {
           });
 
           // Notify Admin
-          io.to('admin_room').emit('auction:admin_level_5_pending', {
+          const pendingPayload = {
             teamId: team.id,
             teamName: team.team_name,
             finalBid: finBid,
             numberBidded: numBidded,
+            level: 4,
             timestamp: new Date().toISOString()
-          });
+          };
+          io.to('admin_room').emit('auction:admin_level_4_pending', pendingPayload);
+          io.to('admin_room').emit('auction:admin_level_5_pending', pendingPayload);
 
-          console.log(`[Auction] Team ${team.team_name} chose Level 5 (PPT Dare/Puzzle Mode)`);
+          console.log(`[Auction] Team ${team.team_name} chose Level 4 (PPT Dare/Puzzle Mode)`);
           return;
         }
 
-        // LEVEL 1 - 4: Pick random question from pool
+        // LEVEL 1 - 3: Pick random question from pool
         const questionData = getNextQuestionForLevel(selectedLevel);
         if (!questionData) return;
 

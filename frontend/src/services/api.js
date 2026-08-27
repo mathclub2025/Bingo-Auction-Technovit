@@ -142,10 +142,10 @@ export async function awardRoundBonus(amount = 250) {
 }
 
 /**
- * Resolve Level 5 Offline Dare/Puzzle
+ * Resolve Level 4 Offline PPT Dare/Puzzle
  */
-export async function resolveLevel5({ teamId, amountBidded, isAnswerCorrect, numberBidded, bonusCoins }) {
-  const res = await request('/api/teams/admin/resolve-level-5', {
+export async function resolveLevel4({ teamId, amountBidded, isAnswerCorrect, numberBidded, bonusCoins = 5000 }) {
+  const res = await request('/api/teams/admin/resolve-level-4', {
     method: 'POST',
     body: JSON.stringify({
       teamId,
@@ -154,6 +154,30 @@ export async function resolveLevel5({ teamId, amountBidded, isAnswerCorrect, num
       numberBidded,
       bonusCoins
     }),
+  });
+  return res;
+}
+
+export const resolveLevel5 = resolveLevel4;
+
+/**
+ * Remove a specific team from the tournament
+ */
+export async function deleteTeamFromDatabase(teamId) {
+  const res = await request(`/api/teams/${teamId}`, {
+    method: 'DELETE',
+    isAdmin: true,
+  });
+  return res;
+}
+
+/**
+ * Clear the entire tournament database (teams, members, score logs)
+ */
+export async function clearDatabaseFromAdmin() {
+  const res = await request('/api/teams/admin/clear-database', {
+    method: 'POST',
+    isAdmin: true,
   });
   return res;
 }
