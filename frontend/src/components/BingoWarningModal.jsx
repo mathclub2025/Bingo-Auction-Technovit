@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import Icon from './Icon';
 
 export default function BingoWarningModal({ warning, onClose }) {
-  const [countdown, setCountdown] = useState(15);
+  const [countdown, setCountdown] = useState(10);
 
   useEffect(() => {
     if (!warning) return;
-    setCountdown(15);
+    setCountdown(10);
 
     const interval = setInterval(() => {
       setCountdown((prev) => {
@@ -39,18 +39,51 @@ export default function BingoWarningModal({ warning, onClose }) {
         justifyContent: 'center',
         zIndex: 99999,
         padding: '20px',
-        animation: 'fadeIn 0.25s ease-out'
+        animation: 'fadeIn 0.2s ease-out'
       }}
     >
+      {/* Heartbeat CSS Animation */}
+      <style>{`
+        @keyframes heartbeatPulse {
+          0% {
+            transform: scale(1);
+            box-shadow: 0 4px 14px rgba(217, 119, 6, 0.25);
+          }
+          14% {
+            transform: scale(1.15);
+            box-shadow: 0 0 28px rgba(245, 158, 11, 0.7);
+          }
+          28% {
+            transform: scale(1);
+            box-shadow: 0 4px 14px rgba(217, 119, 6, 0.25);
+          }
+          42% {
+            transform: scale(1.15);
+            box-shadow: 0 0 28px rgba(245, 158, 11, 0.7);
+          }
+          70% {
+            transform: scale(1);
+            box-shadow: 0 4px 14px rgba(217, 119, 6, 0.25);
+          }
+          100% {
+            transform: scale(1);
+            box-shadow: 0 4px 14px rgba(217, 119, 6, 0.25);
+          }
+        }
+        .heartbeat-chip {
+          animation: heartbeatPulse 1.25s ease-in-out infinite;
+        }
+      `}</style>
+
       <div
         className="card"
         style={{
-          maxWidth: '560px',
+          maxWidth: '480px',
           width: '100%',
-          padding: '32px',
+          padding: '36px 28px 28px',
           background: '#ffffff',
-          borderRadius: '20px',
-          boxShadow: '0 25px 60px -15px rgba(245, 158, 11, 0.4), 0 0 0 2px #f59e0b',
+          borderRadius: '24px',
+          boxShadow: '0 25px 60px -15px rgba(217, 119, 6, 0.4), 0 0 0 2px #f59e0b',
           textAlign: 'center',
           position: 'relative',
           overflow: 'hidden'
@@ -63,8 +96,8 @@ export default function BingoWarningModal({ warning, onClose }) {
             top: 0,
             left: 0,
             height: '4px',
-            background: '#f59e0b',
-            width: `${(countdown / 15) * 100}%`,
+            background: 'linear-gradient(90deg, #f59e0b, #d97706)',
+            width: `${(countdown / 10) * 100}%`,
             transition: 'width 1s linear'
           }}
         />
@@ -93,115 +126,83 @@ export default function BingoWarningModal({ warning, onClose }) {
           <Icon name="x" size={16} />
         </button>
 
-        {/* Warning Badge & Icon */}
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '6px 14px',
-            borderRadius: '999px',
-            background: '#fef3c7',
-            color: '#b45309',
-            fontSize: '0.82rem',
-            fontWeight: 800,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            marginBottom: '16px'
-          }}
-        >
-          <Icon name="alert" size={16} color="#b45309" />
-          <span>Bingo Match-Point Alert</span>
-        </div>
-
-        {/* Headline */}
+        {/* Main Headline */}
         <h2
           style={{
-            fontSize: '1.5rem',
-            fontWeight: 800,
+            fontSize: '1.65rem',
+            fontWeight: 900,
             color: '#0f172a',
-            margin: '0 0 12px',
-            lineHeight: 1.3
+            margin: '8px 0 6px',
+            lineHeight: 1.25,
+            letterSpacing: '-0.02em'
           }}
         >
-          <span style={{ color: '#d97706' }}>{teamName}</span> is 1 Number Away from Winning!
+          <span style={{ color: '#d97706' }}>{teamName}</span> is about to win!
         </h2>
 
-        <p style={{ color: '#475569', fontSize: '0.94rem', margin: '0 0 20px', lineHeight: 1.5 }}>
-          This team has marked 4 out of 5 numbers in a line and is on the verge of completing a winning Bingo!
+        {/* Subtitle */}
+        <p
+          style={{
+            fontSize: '1.05rem',
+            fontWeight: 700,
+            color: '#dc2626',
+            margin: '0 0 24px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
+          }}
+        >
+          Only 1 number left
         </p>
 
-        {/* Required Number Box (Matching exact UI style) */}
+        {/* Heartbeat Flashing Required Number(s) */}
         <div
           style={{
-            background: '#fffdf6',
-            border: '1.5px dashed #fcd34d',
-            borderRadius: '14px',
-            padding: '16px 20px',
-            marginBottom: '20px',
             display: 'flex',
-            flexDirection: 'column',
+            justifyContent: 'center',
             alignItems: 'center',
-            gap: '10px'
+            gap: '14px',
+            flexWrap: 'wrap',
+            marginBottom: '28px',
+            minHeight: '80px'
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              color: '#976100',
-              fontWeight: 700,
-              fontSize: '0.95rem'
-            }}
-          >
-            <Icon name="target" size={18} color="#976100" />
-            <span>Required number to win:</span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            {requiredNumbers.length > 0 ? (
-              requiredNumbers.map((num) => (
-                <div
-                  key={num}
-                  style={{
-                    background: '#fef3c7',
-                    border: '1px solid #fde68a',
-                    color: '#976100',
-                    fontSize: '1.4rem',
-                    fontWeight: 800,
-                    padding: '8px 20px',
-                    borderRadius: '10px',
-                    boxShadow: '0 4px 12px rgba(217, 119, 6, 0.15)',
-                    letterSpacing: '0.02em'
-                  }}
-                >
-                  #{num}
-                </div>
-              ))
-            ) : (
-              <span style={{ color: '#976100', fontWeight: 600 }}>#Any winning line number</span>
-            )}
-          </div>
-        </div>
-
-        {/* Tactical Note */}
-        <div
-          style={{
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '10px',
-            padding: '12px 16px',
-            fontSize: '0.85rem',
-            color: '#64748b',
-            lineHeight: 1.45,
-            marginBottom: '24px',
-            textAlign: 'left'
-          }}
-        >
-          <strong style={{ color: '#334155' }}>⚡ Tactical Notice:</strong> If{' '}
-          <strong style={{ color: '#0f172a' }}>{teamName}</strong> acquires this number in an upcoming auction round,
-          they will immediately complete their line and win the event. Plan your bids accordingly!
+          {requiredNumbers.length > 0 ? (
+            requiredNumbers.map((num) => (
+              <div
+                key={num}
+                className="heartbeat-chip"
+                style={{
+                  background: '#fef3c7',
+                  border: '2.5px solid #f59e0b',
+                  color: '#92400e',
+                  fontSize: '2.2rem',
+                  fontWeight: 900,
+                  padding: '12px 32px',
+                  borderRadius: '16px',
+                  fontFamily: "'DM Mono', monospace",
+                  letterSpacing: '0.04em',
+                  display: 'inline-block'
+                }}
+              >
+                #{num}
+              </div>
+            ))
+          ) : (
+            <div
+              className="heartbeat-chip"
+              style={{
+                background: '#fef3c7',
+                border: '2px solid #f59e0b',
+                color: '#92400e',
+                fontSize: '1.4rem',
+                fontWeight: 900,
+                padding: '12px 24px',
+                borderRadius: '14px'
+              }}
+            >
+              #1 Number Away
+            </div>
+          )}
         </div>
 
         {/* Action Button */}
@@ -211,9 +212,9 @@ export default function BingoWarningModal({ warning, onClose }) {
           className="update-button"
           style={{
             width: '100%',
-            padding: '14px',
-            fontSize: '0.98rem',
-            fontWeight: 700,
+            padding: '13px',
+            fontSize: '0.95rem',
+            fontWeight: 800,
             background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
             border: 'none',
             color: '#ffffff',
@@ -226,7 +227,7 @@ export default function BingoWarningModal({ warning, onClose }) {
             gap: '8px'
           }}
         >
-          <span>Understood / Watch Out! ({countdown}s)</span>
+          <span>Understood ({countdown}s)</span>
           <Icon name="arrow" size={16} color="#ffffff" />
         </button>
       </div>
