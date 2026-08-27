@@ -15,12 +15,39 @@ const LOCAL_STORAGE_TEAM_ID_KEY = 'math_club_user_team_id';
 const LOCAL_STORAGE_TEAMS_KEY = 'math_club_user_teams';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
+const VALID_ROUTES = ['/LandingPage', '/TeamLogin', '/UserDashboard', '/Auction', '/TeamProgress', '/AdminDashboard'];
+
+const normalizePath = (raw) => {
+  if (!raw) return '/LandingPage';
+  let clean = raw.trim();
+  if (clean.startsWith('#')) clean = clean.slice(1);
+  if (!clean.startsWith('/')) clean = `/${clean}`;
+  if (VALID_ROUTES.includes(clean)) return clean;
+  return null;
+};
+
 const getInitialPath = () => {
-  const path = window.location.pathname;
-  if (path === '/' || path === '') return '/LandingPage';
-  if (['/LandingPage', '/TeamLogin', '/UserDashboard', '/Auction', '/TeamProgress', '/AdminDashboard'].includes(path)) {
-    return path;
+  // 1. Check Query Params (e.g. ?page=AdminDashboard or ?view=admin)
+  const params = new URLSearchParams(window.location.search);
+  const pageParam = params.get('page') || params.get('view') || params.get('route');
+  if (pageParam) {
+    const fromQuery = normalizePath(pageParam);
+    if (fromQuery) return fromQuery;
+    if (pageParam.toLowerCase() === 'admin') return '/AdminDashboard';
   }
+
+  // 2. Check Hash (e.g. #/AdminDashboard or #AdminDashboard)
+  const hash = window.location.hash;
+  if (hash) {
+    const fromHash = normalizePath(hash);
+    if (fromHash) return fromHash;
+  }
+
+  // 3. Check Pathname (e.g. /AdminDashboard)
+  const path = window.location.pathname;
+  const fromPath = normalizePath(path);
+  if (fromPath) return fromPath;
+
   return '/LandingPage';
 };
 
@@ -47,20 +74,19 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
-  // Synchronize browser history (Back / Forward buttons)
+  // Synchronize browser history (Back / Forward buttons & Hash Changes)
   useEffect(() => {
     const handlePopState = () => {
-      const p = window.location.pathname;
-      if (['/LandingPage', '/TeamLogin', '/UserDashboard', '/Auction', '/TeamProgress', '/AdminDashboard'].includes(p)) {
-        setCurrentPath(p);
-      } else {
-        setCurrentPath('/LandingPage');
-      }
+      setCurrentPath(getInitialPath());
       setCurrentSearch(window.location.search);
     };
 
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
   }, []);
 
   // 1. Teams State
