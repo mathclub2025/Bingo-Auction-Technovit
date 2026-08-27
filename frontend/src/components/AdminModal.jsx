@@ -6,7 +6,7 @@ import {
   removeAdminToken,
 } from '../services/api';
 
-export default function AdminModal({ isOpen, onClose, teams = [] }) {
+export default function AdminModal({ isOpen, onClose, onOpenFullAdmin, teams = [] }) {
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => Boolean(getAdminToken()));
   const [adminUsername, setAdminUsername] = useState('admin');
   const [adminPassword, setAdminPassword] = useState('');
@@ -143,7 +143,10 @@ export default function AdminModal({ isOpen, onClose, teams = [] }) {
                 type="button"
                 className="tab-btn"
                 onClick={() => {
-                  window.location.pathname = '/AdminDashboard';
+                  if (onClose) onClose();
+                  if (onOpenFullAdmin) {
+                    onOpenFullAdmin();
+                  }
                 }}
                 style={{ background: '#1e4f95', color: '#fff' }}
               >

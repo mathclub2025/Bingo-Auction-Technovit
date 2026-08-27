@@ -3,7 +3,7 @@ import Icon from '../components/Icon';
 import AdminModal from '../components/AdminModal';
 import Footer from '../components/Footer';
 
-export default function LandingPage({ onEnterAuction, teams = [] }) {
+export default function LandingPage({ onEnterAuction, onOpenAdmin, teams = [] }) {
   const [adminModalOpen, setAdminModalOpen] = useState(false);
 
   const handleRegisterClick = () => {
@@ -12,6 +12,14 @@ export default function LandingPage({ onEnterAuction, teams = [] }) {
 
   const handleEntryClick = () => {
     if (onEnterAuction) onEnterAuction('entry');
+  };
+
+  const handleAdminClick = () => {
+    if (onOpenAdmin) {
+      onOpenAdmin();
+    } else if (onEnterAuction) {
+      onEnterAuction('admin');
+    }
   };
 
   return (
@@ -24,9 +32,7 @@ export default function LandingPage({ onEnterAuction, teams = [] }) {
         </div>
         <button
           className="landing-admin-btn"
-          onClick={() => {
-            window.location.pathname = '/AdminDashboard';
-          }}
+          onClick={handleAdminClick}
           type="button"
         >
           <Icon name="shield" size={14} />

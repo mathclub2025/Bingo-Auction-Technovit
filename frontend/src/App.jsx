@@ -347,7 +347,13 @@ export default function App() {
   const renderActiveRoute = () => {
     // ROUTE 1: Landing Page (/LandingPage)
     if (currentPath === '/LandingPage') {
-      return <LandingPage onEnterAuction={handleLandingEnter} teams={teams} />;
+      return (
+        <LandingPage
+          onEnterAuction={handleLandingEnter}
+          onOpenAdmin={() => navigate('/AdminDashboard')}
+          teams={teams}
+        />
+      );
     }
 
     // ROUTE 2: Team Login Page (/TeamLogin)
@@ -430,6 +436,7 @@ export default function App() {
         <AdminModal
           isOpen={adminModalOpen}
           onClose={() => setAdminModalOpen(false)}
+          onOpenFullAdmin={() => navigate('/AdminDashboard')}
           teams={teams}
         />
       </div>
