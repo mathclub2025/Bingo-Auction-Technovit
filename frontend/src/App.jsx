@@ -19,21 +19,27 @@ const VALID_ROUTES = ['/LandingPage', '/TeamLogin', '/UserDashboard', '/Auction'
 
 const normalizePath = (raw) => {
   if (!raw) return '/LandingPage';
-  let clean = raw.trim();
+  let clean = decodeURIComponent(raw).trim();
+  if (clean.includes('?')) clean = clean.split('?')[0];
+  if (clean.includes('#')) clean = clean.split('#')[0];
   if (clean.startsWith('#')) clean = clean.slice(1);
   if (!clean.startsWith('/')) clean = `/${clean}`;
-  if (VALID_ROUTES.includes(clean)) return clean;
+  if (clean.endsWith('/') && clean.length > 1) clean = clean.slice(0, -1);
+
+  // Case-insensitive match against valid routes
+  const matched = VALID_ROUTES.find((r) => r.toLowerCase() === clean.toLowerCase());
+  if (matched) return matched;
   return null;
 };
 
 const getInitialPath = () => {
-  // 1. Check Query Params (e.g. ?page=AdminDashboard or ?view=admin)
+  // 1. Check Query Params (e.g. ?page=AdminDashboard or ?route=/AdminDashboard or ?view=admin)
   const params = new URLSearchParams(window.location.search);
   const pageParam = params.get('page') || params.get('view') || params.get('route');
   if (pageParam) {
     const fromQuery = normalizePath(pageParam);
     if (fromQuery) return fromQuery;
-    if (pageParam.toLowerCase() === 'admin') return '/AdminDashboard';
+    if (pageParam.toLowerCase() === 'admin' || pageParam.toLowerCase() === '/admin') return '/AdminDashboard';
   }
 
   // 2. Check Hash (e.g. #/AdminDashboard or #AdminDashboard)
@@ -45,8 +51,10 @@ const getInitialPath = () => {
 
   // 3. Check Pathname (e.g. /AdminDashboard)
   const path = window.location.pathname;
-  const fromPath = normalizePath(path);
-  if (fromPath) return fromPath;
+  if (path && path !== '/') {
+    const fromPath = normalizePath(path);
+    if (fromPath) return fromPath;
+  }
 
   return '/LandingPage';
 };
