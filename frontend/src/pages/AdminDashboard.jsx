@@ -150,6 +150,31 @@ export default function AdminDashboard({ onSwitchToUserView }) {
     }
   }, [isAuthenticated]);
 
+  // Debounced Match-Point Check: when organizer enters target number, wait 2.5s and check if any team is on the verge of winning
+  useEffect(() => {
+    const num = Number(sendNumberBidded);
+    if (!num || isNaN(num) || num < 1 || num > 25 || !socket) return;
+
+    const timer = setTimeout(() => {
+      console.log(`📡 [Admin Target Number Check] Checking if #${num} is a match-point winning number...`);
+      socket.emit('admin:check_target_number', { number: num });
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [sendNumberBidded, socket]);
+
+  useEffect(() => {
+    const num = Number(number);
+    if (!num || isNaN(num) || num < 1 || num > 25 || !socket) return;
+
+    const timer = setTimeout(() => {
+      console.log(`📡 [Admin Target Number Check (Manual Form)] Checking if #${num} is a match-point winning number...`);
+      socket.emit('admin:check_target_number', { number: num });
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [number, socket]);
+
   const selectedTeam = useMemo(
     () => teams.find((team) => String(team.id) === String(selectedTeamId)) ?? teams[0] ?? { id: '', name: '', coins: 0, numbers: [] },
     [selectedTeamId, teams],

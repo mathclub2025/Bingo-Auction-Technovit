@@ -25,6 +25,42 @@ export function setupSocketService(io) {
       }
     });
 
+    // 0. ADMIN TYPES TARGET NUMBER IN DISPATCH DESK (Debounced Match-Point Warning Check)
+    socket.on('admin:check_target_number', async ({ number }) => {
+      try {
+        const targetNum = Number(number);
+        if (isNaN(targetNum) || targetNum < 1 || targetNum > 25) return;
+
+        const allTeams = await getAllTeamsList();
+        if (!Array.isArray(allTeams)) return;
+
+        // Find any teams that require this target number to win Bingo
+        const threatenedTeams = allTeams.filter((t) => {
+          if (t.isWinner) return false;
+          const reqNums = Array.isArray(t.requiredNumbers) ? t.requiredNumbers : [];
+          return reqNums.includes(targetNum);
+        });
+
+        if (threatenedTeams.length > 0) {
+          threatenedTeams.forEach((team) => {
+            io.emit('bingo:required_number_warning', {
+              teamId: team.id,
+              teamName: team.team_name || team.name,
+              requiredNumbers: [targetNum],
+              allRequiredNumbers: team.requiredNumbers,
+              bingoCardSet: team.bingo_card_set || 1,
+              isTargetNumberAlert: true,
+              message: `${team.team_name || team.name} is about to win with target number #${targetNum}!`,
+              timestamp: new Date().toISOString()
+            });
+            console.log(`⚡ [MATCH POINT ALERT] Target number #${targetNum} matches winning number for ${team.team_name || team.name}! Alert broadcasted.`);
+          });
+        }
+      } catch (err) {
+        console.error('Error in admin:check_target_number:', err);
+      }
+    });
+
     // 1. ADMIN SENDS QUESTION TO A TEAM
     socket.on('admin:send_question', async ({ teamId, initialBid, finalBid, numberBidded }) => {
       try {

@@ -190,6 +190,13 @@ export default function App() {
     socket.on('bingo:required_number_warning', (data) => {
       if (!data || !data.teamId || !Array.isArray(data.requiredNumbers) || data.requiredNumbers.length === 0) return;
 
+      // If triggered by organizer entering a target number, always show it!
+      if (data.isTargetNumberAlert) {
+        console.log('⚡ [Live Match Point Alert on Target Number]:', data);
+        setBingoWarning(data);
+        return;
+      }
+
       const warningKey = `${data.teamId}_${data.requiredNumbers.slice().sort().join('-')}`;
       if (seenWarningKeys.has(warningKey)) {
         console.log(`⚠️ [Bingo Warning] Suppressed duplicate modal for ${data.teamName || data.teamId} (${warningKey})`);
