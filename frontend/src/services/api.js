@@ -11,7 +11,13 @@ export function getApiBaseUrl() {
     if (saved) return saved;
   } catch (e) {}
 
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '');
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && !envUrl.includes('localhost')) {
+    return envUrl.replace(/\/+$/, '');
+  }
+
+  // Active Cloudflare Tunnel Fallback
+  return 'https://strictly-jim-montgomery-dis.trycloudflare.com';
 }
 
 export const API_BASE_URL = getApiBaseUrl();
