@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Icon from './Icon';
+import mathsClubLogo from '../assets/maths-club-logo.png';
 
 export default function Topbar({
   currentView,
@@ -30,7 +31,7 @@ export default function Topbar({
       <header className="figma-topbar">
         <div className="topbar-brand-area">
           <div className="topbar-brand-icon" style={{ background: 'transparent', boxShadow: 'none' }}>
-            <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
+            <img src={mathsClubLogo} alt="Maths Club Logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
           </div>
           <div className="topbar-brand-text">
             <h2>Bingo Auction Arena</h2>

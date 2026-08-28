@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Icon from '../components/Icon';
 import { registerTeam, loginTeam } from '../services/api';
 import { BINGO_CARD_SETS } from '../data/bingoGrids';
+import mathsClubLogo from '../assets/maths-club-logo.png';
 
 export default function TeamLogin({ teams, onTeamSubmit, onBackToLanding, initialTab = 'register' }) {
   const [activeTab, setActiveTab] = useState(initialTab); // 'register' | 'entry'
@@ -128,7 +129,7 @@ export default function TeamLogin({ teams, onTeamSubmit, onBackToLanding, initia
           <article className="figma-card login-card" style={{ padding: '32px' }}>
             <div className="login-header" style={{ marginBottom: '20px' }}>
               <div className="brand-mark-login" style={{ background: 'transparent', boxShadow: 'none', width: '56px', height: '56px' }}>
-                <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '56px', height: '56px', objectFit: 'contain' }} />
+                <img src={mathsClubLogo} alt="Maths Club Logo" style={{ width: '56px', height: '56px', objectFit: 'contain' }} />
               </div>
               <p className="eyebrow" style={{ color: '#047857', marginTop: '10px' }}>Registration Confirmed</p>
               <h2 style={{ fontSize: '1.5rem', margin: '4px 0 6px' }}>{allottedCardData.name || allottedCardData.team_name}</h2>
@@ -211,7 +212,7 @@ export default function TeamLogin({ teams, onTeamSubmit, onBackToLanding, initia
           {activeTab === 'register' && (
             <div className="login-header">
               <div className="brand-mark-login" style={{ background: 'transparent', boxShadow: 'none' }}>
-                <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '52px', height: '52px', objectFit: 'contain' }} />
+                <img src={mathsClubLogo} alt="Maths Club Logo" style={{ width: '52px', height: '52px', objectFit: 'contain' }} />
               </div>
               <h2>Register Your Team</h2>
               <p>Bingo Auction Arena at TechnoVIT • Conducted by Mathematics Club VITCC.</p>
@@ -222,7 +223,7 @@ export default function TeamLogin({ teams, onTeamSubmit, onBackToLanding, initia
           {activeTab === 'entry' && (
             <div className="login-header">
               <div className="brand-mark-login" style={{ background: 'transparent', boxShadow: 'none' }}>
-                <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '52px', height: '52px', objectFit: 'contain' }} />
+                <img src={mathsClubLogo} alt="Maths Club Logo" style={{ width: '52px', height: '52px', objectFit: 'contain' }} />
               </div>
               <h2>Team Entry</h2>
               <p>Enter your registered team name to access the TechnoVIT Bingo Auction Arena dashboard.</p>

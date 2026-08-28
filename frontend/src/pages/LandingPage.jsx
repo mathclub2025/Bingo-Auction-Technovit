@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Icon from '../components/Icon';
 import AdminModal from '../components/AdminModal';
 import Footer from '../components/Footer';
+import mathsClubLogo from '../assets/maths-club-logo.png';
 
 export default function LandingPage({ onEnterAuction, onOpenAdmin, teams = [] }) {
   const [adminModalOpen, setAdminModalOpen] = useState(false);
@@ -27,7 +28,7 @@ export default function LandingPage({ onEnterAuction, onOpenAdmin, teams = [] })
       {/* Top Header with Admin Login */}
       <header className="landing-top-nav">
         <div className="landing-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+          <img src={mathsClubLogo} alt="Maths Club Logo" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
           <span>MATHEMATICS CLUB VITCC • TECHNOVIT</span>
         </div>
         <button

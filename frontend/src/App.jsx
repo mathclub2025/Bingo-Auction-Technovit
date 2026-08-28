@@ -9,6 +9,7 @@ import TeamProgress from './pages/TeamProgress';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminModal from './components/AdminModal';
 import BingoWarningModal from './components/BingoWarningModal';
+import { io } from 'socket.io-client';
 import { getApiBaseUrl } from './services/api';
 
 const LOCAL_STORAGE_TEAM_ID_KEY = 'math_club_user_team_id';

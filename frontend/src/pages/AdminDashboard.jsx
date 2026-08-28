@@ -2,10 +2,11 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { initialTeams } from '../data/mockTeams';
 import Icon from '../components/Icon';
-import { loginAdmin, getAdminToken, removeAdminToken, awardRoundBonus, deleteTeamFromDatabase, clearDatabaseFromAdmin } from '../services/api';
+import { loginAdmin, getAdminToken, removeAdminToken, awardRoundBonus, deleteTeamFromDatabase, clearDatabaseFromAdmin, getApiBaseUrl } from '../services/api';
 import { evaluateBingoCard } from '../data/bingoGrids';
+import mathsClubLogo from '../assets/maths-club-logo.png';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const API_BASE_URL = getApiBaseUrl();
 
 function formatTeam(t) {
   return {
@@ -371,7 +372,7 @@ export default function AdminDashboard({ onSwitchToUserView }) {
           <article className="figma-card login-card">
             <div className="login-header">
               <div className="brand-mark-login" style={{ background: 'transparent', boxShadow: 'none' }}>
-                <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '52px', height: '52px', objectFit: 'contain' }} />
+                <img src={mathsClubLogo} alt="Maths Club Logo" style={{ width: '52px', height: '52px', objectFit: 'contain' }} />
               </div>
               <h2>Admin Control Desk</h2>
               <p>Bingo Auction Arena • Conducted by Mathematics Club VITCC for TechnoVIT.</p>
@@ -427,7 +428,7 @@ export default function AdminDashboard({ onSwitchToUserView }) {
       <header className="topbar">
         <div className="brand">
           <div className="brand-mark" style={{ background: 'transparent', boxShadow: 'none' }}>
-            <img src="/maths-club-logo.png" alt="Maths Club Logo" style={{ width: '42px', height: '42px', objectFit: 'contain' }} />
+            <img src={mathsClubLogo} alt="Maths Club Logo" style={{ width: '42px', height: '42px', objectFit: 'contain' }} />
           </div>
           <div>
             <p className="eyebrow">Mathematics Club VITCC • TechnoVIT</p>
