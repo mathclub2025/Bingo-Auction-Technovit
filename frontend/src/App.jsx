@@ -34,7 +34,19 @@ const normalizePath = (raw) => {
 };
 
 const getInitialPath = () => {
-  // 1. Check Query Params (e.g. ?page=AdminDashboard or ?route=/AdminDashboard or ?view=admin)
+  // 1. Check Hash first (e.g. #/UserDashboard, #UserDashboard, #TeamLogin?tab=entry)
+  const hash = window.location.hash;
+  if (hash) {
+    let cleanHash = hash.replace(/^#\/?/, '');
+    if (cleanHash.includes('?')) {
+      const [routePart] = cleanHash.split('?');
+      cleanHash = routePart;
+    }
+    const fromHash = normalizePath(cleanHash);
+    if (fromHash) return fromHash;
+  }
+
+  // 2. Check Query Params (e.g. ?page=AdminDashboard or ?route=/AdminDashboard or ?view=admin)
   const params = new URLSearchParams(window.location.search);
   const pageParam = params.get('page') || params.get('view') || params.get('route');
   if (pageParam) {
@@ -43,16 +55,12 @@ const getInitialPath = () => {
     if (pageParam.toLowerCase() === 'admin' || pageParam.toLowerCase() === '/admin') return '/AdminDashboard';
   }
 
-  // 2. Check Hash (e.g. #/AdminDashboard or #AdminDashboard)
-  const hash = window.location.hash;
-  if (hash) {
-    const fromHash = normalizePath(hash);
-    if (fromHash) return fromHash;
+  // 3. Check Pathname (e.g. /Bingo-Auction-Technovit/AdminDashboard)
+  let path = window.location.pathname;
+  if (path && path.includes('Bingo-Auction-Technovit')) {
+    path = path.replace(/.*Bingo-Auction-Technovit\/?/, '');
   }
-
-  // 3. Check Pathname (e.g. /AdminDashboard)
-  const path = window.location.pathname;
-  if (path && path !== '/') {
+  if (path && path !== '/' && path !== '') {
     const fromPath = normalizePath(path);
     if (fromPath) return fromPath;
   }
@@ -345,10 +353,14 @@ export default function App() {
     navigate(`/TeamLogin?tab=${tab}`);
   };
 
-  // Determine initial tab for TeamLogin page from URL search params
+  // Determine initial tab for TeamLogin page from URL search params or hash
   const getTeamLoginInitialTab = () => {
-    const params = new URLSearchParams(currentSearch);
-    const tabParam = params.get('tab');
+    const params = new URLSearchParams(currentSearch || window.location.search);
+    let tabParam = params.get('tab');
+    if (!tabParam && window.location.hash.includes('tab=')) {
+      const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+      tabParam = hashParams.get('tab');
+    }
     if (tabParam === 'entry') return 'entry';
     return 'register';
   };
