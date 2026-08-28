@@ -9,11 +9,11 @@ import TeamProgress from './pages/TeamProgress';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminModal from './components/AdminModal';
 import BingoWarningModal from './components/BingoWarningModal';
-import { io } from 'socket.io-client';
+import { getApiBaseUrl } from './services/api';
 
 const LOCAL_STORAGE_TEAM_ID_KEY = 'math_club_user_team_id';
 const LOCAL_STORAGE_TEAMS_KEY = 'math_club_user_teams';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const API_BASE_URL = getApiBaseUrl();
 
 const VALID_ROUTES = ['/LandingPage', '/TeamLogin', '/UserDashboard', '/Auction', '/TeamProgress', '/AdminDashboard'];
 

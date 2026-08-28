@@ -1,4 +1,20 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+export function getApiBaseUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get('api') || params.get('backend') || params.get('server');
+    if (fromQuery) {
+      const clean = fromQuery.trim().replace(/\/+$/, '');
+      localStorage.setItem('math_club_api_base_url', clean);
+      return clean;
+    }
+    const saved = localStorage.getItem('math_club_api_base_url');
+    if (saved) return saved;
+  } catch (e) {}
+
+  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '');
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 const TOKEN_STORAGE_KEY = 'math_club_auth_token';
 const ADMIN_TOKEN_KEY = 'math_club_admin_token';
 
