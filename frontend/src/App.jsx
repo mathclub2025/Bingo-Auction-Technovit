@@ -68,18 +68,19 @@ export default function App() {
   const [activeAuctionState, setActiveAuctionState] = useState('active');
   const [bingoWarning, setBingoWarning] = useState(null);
 
-  // Router navigation helper
+  // Router navigation helper - uses hash synchronization for GitHub Pages compatibility
   const navigate = (toPath, options = {}) => {
     const [pathPart, searchPart] = toPath.split('?');
     const fullSearch = searchPart ? `?${searchPart}` : '';
 
-    if (options.replace) {
-      window.history.replaceState(options.state || null, '', toPath);
-    } else {
-      window.history.pushState(options.state || null, '', toPath);
+    // Set hash so refreshing on GitHub Pages never 404s
+    const cleanHash = pathPart.startsWith('/') ? pathPart.slice(1) : pathPart;
+    if (window.location.hash !== `#${cleanHash}`) {
+      window.location.hash = `#${cleanHash}`;
     }
+
     setCurrentPath(pathPart);
-    setCurrentSearch(fullSearch);
+    if (fullSearch) setCurrentSearch(fullSearch);
     window.scrollTo(0, 0);
   };
 

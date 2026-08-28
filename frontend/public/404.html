@@ -1,23 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="utf-8">
     <title>Bingo Auction Arena</title>
-    <script>
-      // SPA Fallback: Redirect deep links (e.g. /AdminDashboard, /UserDashboard) back to index.html
-      var currentPath = window.location.pathname;
-      var currentSearch = window.location.search;
-      var currentHash = window.location.hash;
-      
-      if (currentPath && currentPath !== '/') {
-        window.location.replace('/?route=' + encodeURIComponent(currentPath + currentSearch + currentHash));
-      } else {
-        window.location.replace('/');
+    <script type="text/javascript">
+      // GitHub Pages SPA redirect handler
+      var path = window.location.pathname;
+      var repo = '/Bingo-Auction-Technovit';
+      var route = path;
+      if (path.startsWith(repo)) {
+        route = path.slice(repo.length);
       }
+      var target = repo + '/?page=' + encodeURIComponent(route) + (window.location.search ? '&' + window.location.search.slice(1) : '') + window.location.hash;
+      window.location.replace(target);
     </script>
   </head>
-  <body style="font-family: sans-serif; text-align: center; padding: 40px; color: #1e3a8a;">
-    <h2>Loading Bingo Auction Arena...</h2>
+  <body>
+    <p>Redirecting to Bingo Auction Arena...</p>
   </body>
 </html>
