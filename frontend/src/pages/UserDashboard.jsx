@@ -2,10 +2,10 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import Icon from '../components/Icon';
 import Footer from '../components/Footer';
-import { addTeammateToDatabase } from '../services/api';
+import { addTeammateToDatabase, getApiBaseUrl } from '../services/api';
 import { evaluateBingoCard, BINGO_CARD_SETS } from '../data/bingoGrids';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const API_BASE_URL = getApiBaseUrl();
 
 export default function UserDashboard({
   activeTeam,
@@ -23,10 +23,10 @@ export default function UserDashboard({
   const [questionOffer, setQuestionOffer] = useState(null);
   const [activeQuestion, setActiveQuestion] = useState(null);
   const [level5PptNotice, setLevel5PptNotice] = useState(null);
-  const [questionResult, setQuestionResult] = useState(null);
   const [selectedOption, setSelectedOption] = useState(null);
-  const [timerRemaining, setTimerRemaining] = useState(0);
+  const [timerRemaining, setTimerRemaining] = useState(30);
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
+  const [questionResult, setQuestionResult] = useState(null);
 
   // Global Bingo Winner Modal
   const [globalWinner, setGlobalWinner] = useState(null);
@@ -48,7 +48,16 @@ export default function UserDashboard({
     });
     setActiveSocket(socket);
 
+    const checkIsCurrentTeam = (data) => {
+      if (!data || !activeTeam) return false;
+      if (String(data.teamId) === String(activeTeam.id)) return true;
+      const dataName = (data.teamName || '').trim().toLowerCase();
+      const myName = (activeTeam.name || activeTeam.team_name || '').trim().toLowerCase();
+      return Boolean(dataName && myName && dataName === myName);
+    };
+
     socket.on('connect', () => {
+      console.log('⚡ [UserDashboard] Connected to socket at', API_BASE_URL, 'for team:', activeTeam.name || activeTeam.team_name);
       socket.emit('join_dashboard', {
         teamId: activeTeam.id,
         teamName: activeTeam.name || activeTeam.team_name,
@@ -57,7 +66,8 @@ export default function UserDashboard({
     });
 
     socket.on('auction:question_offered', (data) => {
-      if (String(data.teamId) === String(activeTeam.id)) {
+      console.log('📢 [auction:question_offered received]:', data);
+      if (checkIsCurrentTeam(data)) {
         setQuestionOffer(data);
         setActiveQuestion(null);
         setLevel5PptNotice(null);
@@ -66,7 +76,8 @@ export default function UserDashboard({
     });
 
     socket.on('auction:team_question_offered', (data) => {
-      if (String(data.teamId) === String(activeTeam.id)) {
+      console.log('📢 [auction:team_question_offered received]:', data);
+      if (checkIsCurrentTeam(data)) {
         setQuestionOffer(data);
         setActiveQuestion(null);
         setLevel5PptNotice(null);
@@ -74,8 +85,16 @@ export default function UserDashboard({
       }
     });
 
+    socket.on('auction:level_4_ppt', (data) => {
+      if (checkIsCurrentTeam(data)) {
+        setQuestionOffer(null);
+        setActiveQuestion(null);
+        setLevel5PptNotice(data);
+      }
+    });
+
     socket.on('auction:level_5_ppt', (data) => {
-      if (String(data.teamId) === String(activeTeam.id)) {
+      if (checkIsCurrentTeam(data)) {
         setQuestionOffer(null);
         setActiveQuestion(null);
         setLevel5PptNotice(data);
@@ -83,7 +102,7 @@ export default function UserDashboard({
     });
 
     socket.on('auction:question_started', (data) => {
-      if (String(data.teamId) === String(activeTeam.id)) {
+      if (checkIsCurrentTeam(data)) {
         setQuestionOffer(null);
         setLevel5PptNotice(null);
         setActiveQuestion(data);
@@ -94,7 +113,7 @@ export default function UserDashboard({
     });
 
     socket.on('auction:question_result', (data) => {
-      if (String(data.teamId) === String(activeTeam.id)) {
+      if (checkIsCurrentTeam(data)) {
         setActiveQuestion(null);
         setQuestionResult(data);
       }
