@@ -35,4 +35,3 @@ logs/
 *.sw?
 .DS_Store
 Thumbs.db
-config.bat
